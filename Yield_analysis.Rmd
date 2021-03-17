@@ -1,0 +1,717 @@
+---
+title: "Yield_analysis"
+output: html_document
+---
+```
+####David Makowski INRAE###
+####18/02/2021####
+#Edited by Rose Abramoff - starting 22/02/2021
+```
+
+```{r global-options, include=FALSE}
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+knitr::knit_hooks$set(time_it = local({
+  now <- NULL
+  function(before, options) {
+    if (before) {
+      # record the current time before each chunk
+      now <<- Sys.time()
+    } else {
+      # calculate the time difference after a chunk
+      res <- difftime(Sys.time(), now)
+      # return a character string to show the time
+      paste("Time for this code chunk to run:", res)
+    }
+  }
+}))
+knitr::opts_chunk$set(time_it = TRUE)
+```
+
+#Load libraries
+```{r load-libraries}
+library(openxlsx)
+library(raster)
+library(rgdal)
+library(rgeos)
+library(maps)
+library(mapdata)
+library(dplyr)
+library(lme4)
+library(lmerTest)
+library(spaMM)
+library(ranger)
+library(ggplot2)
+library(pdp)
+library(caret)
+library(iml)
+library(randomForest)
+#library(fastshap)
+#https://blog.datascienceheroes.com/how-to-interpret-shap-values-in-r/
+```
+
+#Switches
+```{r switches}
+same_locations = TRUE #default is same locations
+drop_future = TRUE
+crop_species = "Soybean" #Maize Rice Soybean Wheat
+```
+
+#Data import
+```{r data-import}
+TAB<-read.xlsx("Projected_Impacts_datasheet_1.3.xlsx", sheet=1)
+head(TAB)
+
+#Extraction of columns
+Species<-as.factor(TAB$Crop)
+Ref<-TAB$Ref.No.
+Sample<-TAB$Sample.No.
+Delta_temp<-as.numeric(TAB$Global.delta.T.from.2005)
+Effect<-as.numeric(TAB$"Climate.impacts.relative.to.2005.(%)")
+CO2<-TAB$CO2
+CO2[CO2=="Yes" | CO2=="yes"]<-"Yes"
+CO2[CO2=="No"]<-"No"
+CO2<-as.factor(CO2)
+CO2.ppm<-TAB$CO2.ppm-390
+CO2.ppm[CO2=="No"]<-0
+Adaptation<-as.factor(TAB$Adaptation)
+RCP<-as.factor(TAB$RCP.Scenarios)
+TempAvg<-as.numeric(TAB$Current.Average.Temperature)
+Latitude<-TAB$latitude
+Longitude<-TAB$longitude
+Baseline<-TAB$"Baseline_Mid-point"
+Future<-TAB$"Future_Mid-point"
+Future_s<-scale(Future)
+```
+
+#Choose crop and prep
+```{r, choose-crop}
+if(same_locations){
+  Loca<-paste(Longitude,Latitude, sep="_") 
+  if(drop_future){
+    DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg, y=Latitude, x=Longitude, Loca)
+  }else{
+    DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg, Future, y=Latitude, x=Longitude, Loca)
+    }
+} else {
+    if(drop_future){
+      DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg, y=Latitude, x=Longitude)
+    }else{
+      DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg, Future, y=Latitude, x=Longitude)
+    }
+}
+
+if(drop_future){
+  DATA<-data.frame(Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg, Latitude, Longitude)
+} else {
+  DATA<-data.frame(Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg, Future, Latitude, Longitude)
+}
+
+DATA<-DATA[DATA$Species==crop_species,]
+DATA<-na.omit(DATA)
+DATA_lm<-DATA_lm[DATA_lm$Species==crop_species,]
+DATA_lm<-na.omit(DATA_lm)
+
+#Remove Species
+DATA<-DATA[ , -which(names(DATA) %in% c("Species"))]
+summary(DATA)
+DATA_lm<-DATA_lm[ , -which(names(DATA_lm) %in% c("Species"))]
+summary(DATA_lm)
+
+#Only x and y
+DATA_xy<-DATA[ , which(names(DATA) %in% c("Effect","Latitude","Longitude"))]
+
+#Compute distance between all data
+DATA_dist<-cbind(DATA$Longitude, DATA$Latitude)
+DIST_mat<-as.matrix(dist(DATA_dist, diag=T, upper=T))
+DATAsp<-data.frame(DATA$Effect,DATA$Delta_temp,DATA$CO2.ppm,DATA$Adaptation,DATA$TempAvg, DATA$Future, DIST_mat)
+names(DATAsp)[1:6]<-c("Effect", "Delta_temp", "CO2.ppm", "Adaptation", "TempAvg", "Future")
+
+#Map of data
+par(mfrow=c(1,1))
+maps::map("world")
+points(DATA$Longitude, DATA$Latitude, pch=19, col="blue", cex=0.6)
+points(DATA$Longitude[DATA$Effect>0], DATA$Latitude[DATA$Effect>0], pch=19, col="green", cex=0.6)
+points(DATA$Longitude[DATA$Effect<(-25)], DATA$Latitude[DATA$Effect<(-25)], pch=19, col="orange", cex=0.6)
+points(DATA$Longitude[DATA$Effect<(-50)], DATA$Latitude[DATA$Effect<(-50)], pch=19, col="red", cex=0.6)
+```
+
+#Analysis
+##Splitting data
+```{r prep-data}
+Loc<-paste(DATA$Longitude,DATA$Latitude, sep="_")
+
+  #Split at the same locations
+if(same_locations){
+  ID<-1:length(Loc)
+  DATA_sample<-cbind(ID,Loc,DATA)
+  #Remove locations including one data only
+  Loc_1<-names(table(DATA_sample$Loc))[as.numeric(table(DATA_sample$Loc))<2]
+  DATA_sample2<-DATA_sample
+  if (length(Loc_1)>1) {
+    ID_1<-ID[DATA_sample$Loc%in%Loc_1==TRUE]
+    DATA_sample2<-DATA_sample[-ID_1,]}
+    #Sample one data per location
+    set.seed(1234)
+    new_data <- DATA_sample2 %>% group_by(Loc) %>% sample_n(1)
+    ID<-new_data$ID
+} else {
+  #Split using different locations
+  Loc<-paste(DATA$Longitude,DATA$Latitude, sep="_")
+  UnLoc<-unique(Loc)
+  ID_loc<-sample(x=UnLoc, size=round(0.25*length(UnLoc)))
+  ID<-(1:nrow(DATA))[Loc%in%ID_loc==TRUE]
+}
+
+Training_xy<-DATA_xy[-ID,]
+Testing_xy<-DATA[ID,]
+Training_1<-DATA[-ID,]
+Testing_1<-DATA[ID,]
+Training_2<-DATA_lm[-ID,]
+Testing_2<-DATA_lm[ID,]
+Training_3<-DATAsp[-ID,]
+Testing_3<-DATAsp[ID,]
+
+#Map of data
+par(mfrow=c(1,1))
+map("world")
+points(Training_1$Longitude, Training_1$Latitude, pch=19, col="red", cex=0.5)
+points(Testing_1$Longitude, Testing_1$Latitude, pch=19, col="blue", cex=0.25)
+```
+
+##ML functions
+```{r, ml-functions}
+do_GBM <- function(mldfTrain){
+fitControl <- caret::trainControl( #10 fold CV
+  method = "repeatedcv",
+  number = 10,
+  repeats = 10 )
+set.seed(1234)
+gbmFit1 <- caret::train( Effect ~ ., data = mldfTrain,
+                    method = "gbm",
+                    trControl = fitControl,
+                    verbose = FALSE )
+return(gbmFit1)
+}
+
+pfun <- function(object, newdata) predict(object, data = newdata)$predictions
+
+do_iml_rf <- function(predictor, mod_ml, Training, Testing, PlotTitle){
+imp <- FeatureImp$new(predictor, loss = "mae")
+
+#strength of interactions
+interact <- Interaction$new(predictor)
+
+#specify two-way interactions
+# interact <- Interaction$new(predictor, feature = "Longitude")
+# plot(interact)
+
+#feature effects
+effs <- FeatureEffects$new(predictor, method="pdp")
+#plot(effs$results$Latitude$.borders, effs$results$Latitude$.value, type="l") #can recreate to rename y ax but not sure how to recreate rug
+
+#shapley
+shapley <- Shapley$new(predictor, x.interest = Training[1,-1])
+
+#plots
+print(plot(imp) + ggtitle(paste0(PlotTitle," ",crop_species)))
+print(plot(interact) + ggtitle(paste0(PlotTitle," ",crop_species)))
+print(plot(effs) + ggtitle(paste0(PlotTitle," ",crop_species)))
+print(shapley$plot() + ggtitle(paste0(PlotTitle," ",crop_species)))
+
+Pred_ml<-predict(mod_ml, data=Testing)$predictions
+RMSEP_ml=sqrt(mean((Testing$Effect-Pred_ml)^2))
+return(RMSEP_ml)
+}
+
+do_iml_gbm <- function(predictor, mod_ml, Training, Testing, PlotTitle){
+imp <- FeatureImp$new(predictor, loss = "mae")
+
+#strength of interactions
+interact <- Interaction$new(predictor)
+
+#specify two-way interactions
+# interact <- Interaction$new(predictor, feature = "Longitude")
+# plot(interact)
+
+#feature effects
+effs <- FeatureEffects$new(predictor, method="pdp")
+#plot(effs$results$Latitude$.borders, effs$results$Latitude$.value, type="l") #can recreate to rename y ax but not sure how to recreate rug
+
+#shapley
+shapley <- Shapley$new(predictor, x.interest = Training[1,-1])
+
+#plots
+print(plot(imp) + ggtitle(paste0(PlotTitle," ",crop_species)))
+print(plot(interact) + ggtitle(paste0(PlotTitle," ",crop_species)))
+print(plot(effs) + ggtitle(paste0(PlotTitle," ",crop_species)))
+print(shapley$plot() + ggtitle(paste0(PlotTitle," ",crop_species)))
+
+Pred_ml<-predict(mod_ml, newdata=Testing)
+RMSEP_ml=sqrt(mean((Testing$Effect-Pred_ml)^2))
+return(RMSEP_ml)
+}
+```
+
+##Random Forests and GBM
+###Spatial RF
+```{r spatial-rf}
+set.seed(1234)
+mod.rf.xy <- ranger(Effect~., data=Training_xy, num.trees=1000)
+mod.rf.xy
+
+predictor.rf.xy <- Predictor$new(model = mod.rf.xy, data = Training_xy[-1], y = Training_xy$Effect, predict.fun = pfun)
+
+RMSEP_rf_xy <- do_iml_rf(predictor.rf.xy, mod.rf.xy, Training_xy, Testing_xy, PlotTitle="Spatial RF")
+```
+
+###Spatial GBM
+```{r, spatial-gbm}
+mod.gbm.xy <- do_GBM(Training_xy)
+mod.gbm.xy
+
+predictor.gbm.xy <- Predictor$new(model = mod.gbm.xy, data = Training_xy[-1], y = Training_xy$Effect)
+
+RMSEP_gbm_xy <- do_iml_gbm(predictor.gbm.xy, mod.gbm.xy, Training_xy, Testing_xy, PlotTitle="Spatial GBM")
+```
+
+###Climate RF
+```{r climate-rf}
+Training_0 <- Training_1[,-which(names(Training_1) %in% c("Latitude","Longitude"))]
+
+mod.rf.0 <- ranger(Effect~., data=Training_0, num.trees=1000)
+mod.rf.0
+
+predictor.rf.0 <- Predictor$new(mod.rf.0, data = Training_0[-1], y = Training_0$Effect, predict.fun = pfun)
+
+RMSEP_rf_0 <- do_iml_rf(predictor.rf.0, mod.rf.0, Training_0, Testing_1, PlotTitle="Climate RF")
+
+X0<- predict(mod.rf.0, data=Training_1)$predictions
+Training_2_bis<-cbind(Training_2,X0)
+Pred_rf_0<-predict(mod.rf.0, data=Testing_1)$predictions
+
+# #specify two-way interactions
+# interact <- Interaction$new(predictor.rf.0, feature = "TempAvg")
+# plot(interact)
+# 
+# eff <- FeatureEffect$new(predictor.rf.0, feature = c("TempAvg", "Delta_temp"), method="pdp")
+# eff$plot()
+
+#write a loop around the shapley
+for (i in dim(Training_1)[1]){
+shapley[[i]] <- Shapley$new(predictor.rf.0 , x.interest = Training_0[i,-1])  
+}
+```
+
+###Climate GBM
+```{r climate-gbm}
+mod.gbm.0 <- do_GBM(Training_0)
+mod.gbm.0
+
+predictor.gbm.0 <- Predictor$new(mod.gbm.0, data = Training_0[-1], y = Training_0$Effect)
+
+RMSEP_gbm_0 <- do_iml_gbm(predictor.gbm.0, mod.gbm.0, Training_0, Testing_1, PlotTitle="Climate GBM")
+```
+
+###Climate+longlat RF
+```{r, climate-longlat-rf}
+set.seed(1234)
+if(same_locations){
+  mod.rf.1 <- ranger(Effect~., data=Training_1, num.trees=1000, importance="permutation")
+} else {
+  mod.rf.1 <- ranger(Effect~., data=Training_1, num.trees=1000)
+}
+mod.rf.1
+
+predictor.rf.1 <- Predictor$new(mod.rf.1, data = Training_1[-1], y = Training_1$Effect, predict.fun = pfun)
+
+RMSEP_rf_1 <- do_iml_rf(predictor.rf.1, mod.rf.1, Training_1, Testing_1, PlotTitle="Climate+LongLat RF")
+```
+
+###Climate+longlat GBM
+```{r climate-longlat-gbm}
+mod.gbm.1 <- do_GBM(Training_1)
+mod.gbm.1
+
+predictor.gbm.1 <- Predictor$new(mod.gbm.1, data = Training_1[-1], y = Training_1$Effect)
+
+RMSEP_gbm_1 <- do_iml_gbm(predictor.gbm.1, mod.gbm.1, Training_1, Testing_1, PlotTitle="Climate+LongLat GBM")
+```
+
+###Distances RF
+```{r distances-rf}
+set.seed(1234)
+mod.rf.2 <- ranger(Effect~., data=Training_3, num.trees=1000)
+mod.rf.2
+
+pred.rf.2 <-predict(mod.rf.2, data=Testing_3)$predictions
+RMSEP_rf_2 = sqrt(mean((Testing_3$Effect-pred.rf.2)^2))
+
+#full iml takes too long because of the many distances
+#predictor.rf.2 <- Predictor$new(mod.rf.2, data = Training_3[-1], y = Training_3$Effect, predict.fun = pfun)
+#RMSEP_rf_2 <- do_iml(predictor.rf.2, Training_3, Testing_3, PlotTitle="Distances RF")
+```
+
+###Distances GBM
+```{r distances-gbm}
+mod.gbm.2 <- do_GBM(Training_3)
+mod.gbm.2
+
+pred.gbm.2 <-predict(mod.gbm.2, newdata=Testing_3)
+RMSEP_gbm_2 = sqrt(mean((Testing_3$Effect-pred.gbm.2)^2))
+
+#full iml takes too long because of the many distances
+#predictor.gbm.2 <- Predictor$new(mod.gbm.2, data = Training_3[-1], y = Training_3$Effect)
+#RMSEP_gbm_2 <- do_iml(predictor.gbm.2, Training_3, Testing_3, PlotTitle="Distances GBM")
+```
+
+##Mixed models
+###Climate-+CO2
+```{r climate-lme}
+#Linear model climate - CO2
+#Linear model climate + CO2
+if(same_locations){
+  mod_noco2<-lmer(Effect~Delta_temp*TempAvg+Adaptation+Future+(1|Loca), data=Training_2)  
+  mod_co2<-lmer(Effect~Delta_temp*TempAvg+Adaptation+CO2.ppm+Future+(1|Loca), data=Training_2)
+} else {
+  mod_noco2<-lmer(Effect~Delta_temp*TempAvg+Adaptation+Future+(1|Ref), data=Training_2)
+  mod_co2<-lmer(Effect~Delta_temp*TempAvg+Adaptation+CO2.ppm+Future+(1|Ref), data=Training_2)
+}
+summary(mod_noco2)
+summary(mod_co2)
+
+if(same_locations){
+  Pred_noco2<-predict(mod_noco2, newdata=Testing_2)
+  Pred_co2<-predict(mod_co2, newdata=Testing_2)
+} else {
+  Pred_noco2<-predict(mod_noco2, newdata=Testing_2, re.form=NA)
+  Pred_co2<-predict(mod_co2, newdata=Testing_2, re.form=NA)
+}
+
+RMSEP_lm_noco2=sqrt(mean((Testing_2$Effect-Pred_noco2)^2))
+RMSEP_lm_co2=sqrt(mean((Testing_2$Effect-Pred_co2)^2))
+```
+
+###Climate-+CO2+Interactions
+```{r climate-int-lme}
+#Linear model climate - CO2
+#Linear model climate + CO2
+if(same_locations){
+  mod_noco2_ints<-lmer(Effect~ Delta_temp*Adaptation + Future*TempAvg + Delta_temp*TempAvg+Adaptation+Future+(1|Loca), data=Training_2)  
+  mod_co2_ints<-lmer(Effect~Delta_temp*CO2.ppm + Delta_temp*Adaptation + Future*TempAvg + Delta_temp*TempAvg+Adaptation+CO2.ppm+Future+(1|Loca), data=Training_2)
+} else {
+  mod_noco2_ints<-lmer(Effect~Delta_temp*Adaptation + Future*TempAvg + Delta_temp*TempAvg+Adaptation+Future+(1|Ref), data=Training_2)
+  mod_co2_ints<-lmer(Effect~Delta_temp*CO2.ppm + Delta_temp*Adaptation + Future*TempAvg + Delta_temp*TempAvg+Adaptation+CO2.ppm+Future+(1|Ref), data=Training_2)
+}
+summary(mod_noco2_ints)
+summary(mod_co2_ints)
+
+if(same_locations){
+  Pred_noco2_ints<-predict(mod_noco2_ints, newdata=Testing_2)
+  Pred_co2_ints<-predict(mod_co2_ints, newdata=Testing_2)
+} else {
+  Pred_noco2_ints<-predict(mod_noco2_ints, newdata=Testing_2, re.form=NA)
+  Pred_co2_ints<-predict(mod_co2_ints, newdata=Testing_2, re.form=NA)
+}
+
+RMSEP_lm_noco2_ints=sqrt(mean((Testing_2$Effect-Pred_noco2_ints)^2))
+RMSEP_lm_co2_ints=sqrt(mean((Testing_2$Effect-Pred_co2_ints)^2))
+```
+
+###Spatial
+```{r spamm}
+#Spatial linear model
+mod_spa_0<-fitme(Effect~1+Matern(1|x+y), data=Training_2)
+summary(mod_spa_0)
+
+Pred_spa_0<-predict(mod_spa_0, newdata=Testing_2)
+RMSEP_spa_0=sqrt(mean((Testing_2$Effect-Pred_spa_0)^2))
+```
+
+###Spatial climate -CO2
+```{r climate-spamm}
+#Spatial linear model + climate - CO2
+mod_spa_noco2<-fitme(Effect~Delta_temp*TempAvg+Adaptation+Future+Matern(1|x+y), data=Training_2)
+summary(mod_spa_noco2)
+
+Pred_spa_noco2<-predict(mod_spa_noco2, newdata=Testing_2)
+RMSEP_spa_noco2=sqrt(mean((Testing_2$Effect-Pred_spa_noco2)^2))
+```
+
+###Spatial climate +CO2
+```{r climate-co2-spamm}
+#Spatial linear model + climate + CO2
+mod_spa_co2<-fitme(Effect~Delta_temp*TempAvg+Adaptation+CO2.ppm+Future+Matern(1|x+y), data=Training_2)
+summary(mod_spa_co2)
+
+Pred_spa_co2<-predict(mod_spa_co2, newdata=Testing_2)
+RMSEP_spa_co2=sqrt(mean((Testing_2$Effect-Pred_spa_co2)^2))
+```
+
+###Spatial+RF outputs
+```{r climate-rf-spamm}
+#Sptial linear model + RF outputs
+mod_spa_rf<-fitme(Effect~X0+Matern(1|x+y), data=Training_2_bis)
+summary(mod_spa_rf)
+
+Testing_2_bis<-cbind(Testing_2, X0=Pred_rf_0)
+Pred_spa_rf<-predict(mod_spa_rf, newdata=Testing_2_bis)
+RMSEP_spa_rf=sqrt(mean((Testing_2_bis$Effect-Pred_spa_rf)^2))
+```
+
+##Summarize RMSE
+```{r}
+NAME<-c("RF long lat","GBM long lat",
+        "RF climate","GBM climate",
+        "RF climate + long lat","GBM climate + long lat",
+        "RF distances","GBM distances",
+        "Linear model climate - CO2","Linear model climate + CO2",
+        "Linear model climate - CO2 interactions","Linear model climate + CO2 interactions",
+        "Spatial linear model","Spatial linear model + climate - CO2","Spatial linear model + climate + CO2","Spatial linear model + RF outputs")
+
+RMSEP <- c(RMSEP_rf_xy,RMSEP_gbm_xy,
+RMSEP_rf_0,RMSEP_gbm_0,
+RMSEP_rf_1,RMSEP_gbm_1,
+RMSEP_rf_2,RMSEP_gbm_2,
+RMSEP_lm_noco2,RMSEP_lm_co2,
+RMSEP_lm_noco2_ints,RMSEP_lm_co2_ints,
+RMSEP_spa_0,
+RMSEP_spa_noco2,
+RMSEP_spa_co2,
+RMSEP_spa_rf)
+
+RESULT<-data.frame(NAME,RMSEP)
+RESULT
+```
+
+#Original Analysis
+```{r, eval=F}
+RMSEP_rf_xy_vec<-c()
+RMSEP_rf_0_vec<-c()
+RMSEP_rf_1_vec<-c()
+RMSEP_rf_2_vec<-c()
+
+RMSEP_lm_noco2_vec<-c()
+RMSEP_lm_co2_vec<-c()
+
+RMSEP_spa_0_vec<-c()
+RMSEP_spa_noco2_vec<-c()
+RMSEP_spa_co2_vec<-c()
+RMSEP_spa_rf_vec<-c()
+
+i = 1
+Nb<-50
+#for (i in 1:Nb) { #WORKING Loop eventually 50 times but for now tinkering
+
+print(i)
+#######################################
+#####Training and Testing datasets#####
+#######################################
+
+set.seed(i)
+
+Loc<-paste(DATA$Longitude,DATA$Latitude, sep="_")
+
+  #Split at the same locations
+if(same_locations){
+  ID<-1:length(Loc)
+  DATA_sample<-cbind(ID,Loc,DATA)
+  #Remove locations including one data only
+  Loc_1<-names(table(DATA_sample$Loc))[as.numeric(table(DATA_sample$Loc))<2]
+  DATA_sample2<-DATA_sample
+  if (length(Loc_1)>1) {
+    ID_1<-ID[DATA_sample$Loc%in%Loc_1==TRUE]
+    DATA_sample2<-DATA_sample[-ID_1,]}
+    #Sample one data per location
+    new_data <- DATA_sample2 %>% group_by(Loc) %>% sample_n(1)
+    ID<-new_data$ID
+} else {
+  #Split using different locations
+  Loc<-paste(DATA$Longitude,DATA$Latitude, sep="_")
+  UnLoc<-unique(Loc)
+  ID_loc<-sample(x=UnLoc, size=round(0.25*length(UnLoc)))
+  ID<-(1:nrow(DATA))[Loc%in%ID_loc==TRUE]
+}
+
+Training_xy<-DATA_xy[-ID,]
+Testing_xy<-DATA[ID,]
+Training_1<-DATA[-ID,]
+Testing_1<-DATA[ID,]
+Training_2<-DATA_lm[-ID,]
+Testing_2<-DATA_lm[ID,]
+Training_3<-DATAsp[-ID,]
+Testing_3<-DATAsp[ID,]
+
+#Map of data
+par(mfrow=c(1,1))
+map("world")
+points(Training_1$Longitude, Training_1$Latitude, pch=19, col="red", cex=0.5)
+points(Testing_1$Longitude, Testing_1$Latitude, pch=19, col="blue", cex=0.25)
+
+##############
+###Training###
+##############
+
+#######################
+#####Random forest#####
+#######################
+
+mod.rf.xy <- ranger(Effect~., data=Training_xy, num.trees=1000)
+mod.rf.xy
+
+mod.rf.0 <- ranger(Effect~., data=Training_1[,-c(8,9)], num.trees=1000)
+mod.rf.0
+
+X0<- predict(mod.rf.0, data=Training_1)$predictions
+Training_2_bis<-cbind(Training_2,X0)
+
+if(same_locations){
+  mod.rf.1 <- ranger(Effect~., data=Training_1, num.trees=1000, importance="permutation")
+} else {
+  mod.rf.1 <- ranger(Effect~., data=Training_1, num.trees=1000)
+}
+mod.rf.1
+mod.rf.1$variable.importance
+
+#Spatial
+mod.rf.2 <- ranger(Effect~., data=Training_3, num.trees=1000)
+mod.rf.2
+
+#######################
+######Mixed model######
+#######################
+if(same_locations){
+  mod_noco2<-lmer(Effect~Delta_temp*TempAvg+Adaptation+Future+(1|Loca), data=Training_2)  
+  mod_co2<-lmer(Effect~Delta_temp*TempAvg+Adaptation+CO2.ppm+Future+(1|Loca), data=Training_2)
+} else {
+  mod_noco2<-lmer(Effect~Delta_temp*TempAvg+Adaptation+Future+(1|Ref), data=Training_2)
+  mod_co2<-lmer(Effect~Delta_temp*TempAvg+Adaptation+CO2.ppm+Future+(1|Ref), data=Training_2)
+}
+summary(mod_noco2)
+summary(mod_co2)
+mod_spa_0<-fitme(Effect~1+Matern(1|x+y), data=Training_2)
+summary(mod_spa_0)
+mod_spa_noco2<-fitme(Effect~Delta_temp*TempAvg+Adaptation+Future+Matern(1|x+y), data=Training_2)
+summary(mod_spa_noco2)
+mod_spa_co2<-fitme(Effect~Delta_temp*TempAvg+Adaptation+CO2.ppm+Future+Matern(1|x+y), data=Training_2)
+summary(mod_spa_co2)
+mod_spa_rf<-fitme(Effect~X0+Matern(1|x+y), data=Training_2_bis)
+summary(mod_spa_rf)
+
+##################
+######Testing#####
+##################
+
+Pred_rf_xy<-predict(mod.rf.xy, data=Testing_xy)$predictions
+Pred_rf_0<-predict(mod.rf.0, data=Testing_1)$predictions
+Pred_rf_1<-predict(mod.rf.1, data=Testing_1)$predictions
+Pred_rf_2<-predict(mod.rf.2, data=Testing_3)$predictions
+
+if(same_locations){
+  Pred_noco2<-predict(mod_noco2, newdata=Testing_2)
+  Pred_co2<-predict(mod_co2, newdata=Testing_2)
+} else {
+  Pred_noco2<-predict(mod_noco2, newdata=Testing_2, re.form=NA)
+  Pred_co2<-predict(mod_co2, newdata=Testing_2, re.form=NA)
+}
+
+Pred_spa_0<-predict(mod_spa_0, newdata=Testing_2)
+Pred_spa_noco2<-predict(mod_spa_noco2, newdata=Testing_2)
+Pred_spa_co2<-predict(mod_spa_co2, newdata=Testing_2)
+
+Testing_2_bis<-cbind(Testing_2, X0=Pred_rf_0)
+Pred_spa_rf<-predict(mod_spa_rf, newdata=Testing_2_bis)
+
+##################
+######RMSE########
+##################
+
+pdf(file="plots.pdf", height=5, width=8)
+par(mfrow=c(2,5))
+
+RMSEP_rf_xy=sqrt(mean((Testing_xy$Effect-Pred_rf_xy)^2))
+plot(Testing_xy$Effect,Pred_rf_xy)
+abline(0,1)
+
+RMSEP_rf_0=sqrt(mean((Testing_1$Effect-Pred_rf_0)^2))
+plot(Testing_1$Effect,Pred_rf_0)
+abline(0,1)
+
+RMSEP_rf_1=sqrt(mean((Testing_1$Effect-Pred_rf_1)^2))
+plot(Testing_1$Effect,Pred_rf_1)
+abline(0,1)
+
+RMSEP_rf_2=sqrt(mean((Testing_3$Effect-Pred_rf_2)^2))
+plot(Testing_1$Effect,Pred_rf_2)
+abline(0,1)
+
+RMSEP_lm_noco2=sqrt(mean((Testing_2$Effect-Pred_noco2)^2))
+plot(Testing_2$Effect,Pred_noco2)
+abline(0,1)
+
+RMSEP_lm_co2=sqrt(mean((Testing_2$Effect-Pred_co2)^2))
+plot(Testing_2$Effect,Pred_co2)
+abline(0,1)
+
+RMSEP_spa_0=sqrt(mean((Testing_2$Effect-Pred_spa_0)^2))
+plot(Testing_2$Effect,Pred_spa_0)
+abline(0,1)
+
+RMSEP_spa_noco2=sqrt(mean((Testing_2$Effect-Pred_spa_noco2)^2))
+plot(Testing_2$Effect,Pred_spa_noco2)
+abline(0,1)
+
+RMSEP_spa_co2=sqrt(mean((Testing_2$Effect-Pred_spa_co2)^2))
+plot(Testing_2$Effect,Pred_spa_co2)
+abline(0,1)
+
+RMSEP_spa_rf=sqrt(mean((Testing_2_bis$Effect-Pred_spa_rf)^2))
+plot(Testing_2_bis$Effect,Pred_spa_rf)
+abline(0,1)
+
+dev.off()
+
+RMSEP_rf_xy_vec<-c(RMSEP_rf_xy_vec,RMSEP_rf_xy)
+RMSEP_rf_0_vec<-c(RMSEP_rf_0_vec,RMSEP_rf_0)
+RMSEP_rf_1_vec<-c(RMSEP_rf_1_vec,RMSEP_rf_1)
+RMSEP_rf_2_vec<-c(RMSEP_rf_2_vec,RMSEP_rf_2)
+
+RMSEP_lm_noco2_vec<-c(RMSEP_lm_noco2_vec,RMSEP_lm_noco2)
+RMSEP_lm_co2_vec<-c(RMSEP_lm_co2_vec,RMSEP_lm_co2)
+
+RMSEP_spa_0_vec<-c(RMSEP_spa_0_vec,RMSEP_spa_0)
+RMSEP_spa_noco2_vec<-c(RMSEP_spa_noco2_vec,RMSEP_spa_noco2)
+RMSEP_spa_co2_vec<-c(RMSEP_spa_co2_vec,RMSEP_spa_co2)
+RMSEP_spa_rf_vec<-c(RMSEP_spa_rf_vec,RMSEP_spa_rf)
+
+#}
+
+NAME<-c("RF long lat","RF climate","RF climate + long lat","RF distances","Linear model climate - CO2","Linear model climate + CO2","Spatial linear model","Spatial linear model + climate - CO2","Spatial linear model + climate + CO2","Spatial linear model + RF outputs")
+
+MEAN<-c(
+mean(RMSEP_rf_xy_vec),
+mean(RMSEP_rf_0_vec),
+mean(RMSEP_rf_1_vec),
+mean(RMSEP_rf_2_vec),
+mean(RMSEP_lm_noco2_vec),
+mean(RMSEP_lm_co2_vec),
+mean(RMSEP_spa_0_vec),
+mean(RMSEP_spa_noco2_vec),
+mean(RMSEP_spa_co2_vec),
+mean(RMSEP_spa_rf_vec))
+
+SE<-c(
+sd(RMSEP_rf_xy_vec)/sqrt(Nb),
+sd(RMSEP_rf_0_vec)/sqrt(Nb),
+sd(RMSEP_rf_1_vec)/sqrt(Nb),
+sd(RMSEP_rf_2_vec)/sqrt(Nb),
+sd(RMSEP_lm_noco2_vec)/sqrt(Nb),
+sd(RMSEP_lm_co2_vec)/sqrt(Nb),
+sd(RMSEP_spa_0_vec)/sqrt(Nb),
+sd(RMSEP_spa_noco2_vec)/sqrt(Nb),
+sd(RMSEP_spa_co2_vec)/sqrt(Nb),
+sd(RMSEP_spa_rf_vec)/sqrt(Nb))
+
+RESULT<-data.frame(NAME,MEAN,SE)
+RESULT
+```
+
