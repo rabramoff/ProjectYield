@@ -51,10 +51,10 @@ library(DALEX)
 
 #Switches
 ```{r switches}
-same_locations = TRUE #default is same locations
-drop_future = FALSE
-crop_species = "Maize" #Maize Rice Soybean Wheat
-do_iml = TRUE
+same_locations = T #default is same locations
+drop_future = T
+crop_species = "Soybean" #Maize Rice Soybean Wheat
+do_iml = F
 ```
 
 #Data import
@@ -512,6 +512,14 @@ NewDataObs<-data.frame(Delta_temp=rep(2, M),CO2.ppm=rep(116,M),Adaptation=as.fac
 levels(NewData$Adaptation)=c("No","Yes")
 levels(NewDataObs$Adaptation)=c("No","Yes")
 
+#WORKING predict one value - ok works with numbers, but doesn't seem to work with the data above, what gives??
+mod.test <- ranger(Effect~., data=Training_1, num.trees=1000, importance="permutation")
+predict(mod.test,data=data.frame(Delta_temp=c(0,0,0,0),CO2.ppm=c(500,500,500,500),Adaptation=c(1,2,"No","Yes"),TempAvg=c(8,8,8,8), Latitude=c(30,30,30,30), Longitude=c(110,110,110,110), Future=c(2100,2100,2100,2100)) )$predictions
+summary(Training_1$Adaptation)
+head(Training_1$Adaptation)
+str(Training_1)
+#as.factor("Yes","No") #2 = Yes, 1 = No (Yes is default??)
+
 #Prediction RF
 Pred_rf<-predict(mod.rf.1,data=NewData)
 Pred_rf_obs<-predict(mod.rf.1,data=NewDataObs)
@@ -540,7 +548,7 @@ MAT<-setValues(MAT, Z)
 
 summary(Pred)
 
-#pdf(file=paste0(crop_species,"_rcp4.5.pdf"), height=8, width=8)
+pdf(file=paste0(crop_species,"_rcp4.5.pdf"), height=8, width=8)
 par(bty="n")
 #par(fig=c(0,0.75,0.5,1))
 plot(MAT, col=rev(hcl.colors(25)), breaks=seq(-80,40,by=5))
@@ -548,7 +556,7 @@ text(0,100, paste0(crop_species," with RCP 4.5"))
 #text(0,100, paste0(crop_species," with +2°C +200ppm and adaptation"))
 maps::map("world", add=T)
 #points(DATA$Longitude, DATA$Latitude, pch=19, col="red")
-#dev.off()
+dev.off()
 
 par(mfrow=c(1,1))
 AreaOrder<-TAB_p_f$Total[order(Pred)]
@@ -589,9 +597,14 @@ shap_max <- predict_parts(explainer = explain_rf,
                       new_observation = Training_1[which.max(Training_1$Effect),-1], 
                                  type = "shap",
                                     B = 25)
+shap_mean <- predict_parts(explainer = explain_rf, 
+                      new_observation = Training_1[2,-1], 
+                                 type = "shap",
+                                    B = 25)
 
 plot(shap_min)
 plot(shap_max)
+plot(shap_mean)
 
 NewData$Effect <- predict(explain_rf, NewData)
 
@@ -610,8 +623,120 @@ shap_max <- predict_parts(explainer = explain_rf,
                       new_observation = NewRCP, 
                                  type = "shap",
                                     B = 25)
+shap_mean <- predict_parts(explainer = explain_rf, 
+                      new_observation = NewRCP, 
+                                 type = "shap",
+                                    B = 25)
 
 plot(shap_min)
 plot(shap_max)
+plot(shap_mean)
+```
+
+#Mean Shapley values for mapping
+```{r}
+set.seed(1234)
+
+explain_rf <- DALEX::explain(model = mod.rf.1,  
+                        data = Training_1,
+                           y = Training_1$Effect, 
+                       label = "Random Forest")
+
+#0.11 minutes for 1 row
+shap_co2ppm <- vector(length=dim(Training_1)[1])
+start.time <- Sys.time()
+for (i in 1:dim(Training_1)[1]){
+shap_mean <- predict_parts(explainer = explain_rf, 
+                      new_observation = Training_1[i,-1], 
+                                 type = "shap",
+                                    B = 25)
+shap_co2ppm[i] <- shap_mean[shap_mean$variable_name=="CO2.ppm",]$contribution[1]
+}
+end.time <- Sys.time()
+end.time-start.time
+
+NewData <- Training_1
+NewData$shap_co2ppm <- shap_co2ppm
+
+##Shap map plot
+pdf(file=paste0(crop_species,"_shapmap.pdf"), height=8, width=8)
+maps::map("world")
+points(NewData$Longitude, NewData$Latitude, pch=19, col=NewData$CO2.ppm, cex=0.5)
+text(0,100, paste0(crop_species," Shapley CO2ppm"))
+dev.off()
+
+#Then most important Shapley for each grid cell (must compute all)
+```
+
+#Mean Shapley value CO2ppm RCP4.5
+```{r}
+#RCP4.5
+NewData<-data.frame(Delta_temp=rep(2, N),CO2.ppm=rep(116,N),Adaptation=as.factor(rep("No",N)),TempAvg=TAB_p_f$Tave, Latitude=TAB_p_f$y, Longitude=TAB_p_f$x, Future=rep(2060,N))
+M<-nrow(DATA)
+NewDataObs<-data.frame(Delta_temp=rep(2, M),CO2.ppm=rep(116,M),Adaptation=as.factor(rep("No",M)),TempAvg=DATA$TempAvg, Latitude=DATA$Latitude, Longitude=DATA$Longitude, Future=rep(2060,M))
+levels(NewData$Adaptation)=c("No","Yes")
+levels(NewDataObs$Adaptation)=c("No","Yes")
+
+#Prediction RF
+Pred_rf<-predict(mod.rf.1,data=NewData)
+Pred_rf_obs<-predict(mod.rf.1,data=NewDataObs)
+
+#Whole map
+Pred=Pred_rf$predictions
+NewData$Effect <- Pred
+
+#Do the Shap part
+set.seed(1234)
+
+if(drop_future){
+  NewData <- NewData[,-c(7)]
+}
+
+explain_rf <- DALEX::explain(model = mod.rf.1,  
+                        data = Training_1,
+                           y = Training_1$Effect, 
+                       label = "Random Forest")
+
+#3.5 hours
+shap_co2ppm <- vector(length=dim(NewData)[1])
+start.time <- Sys.time()
+for (i in 1:dim(NewData)[1]){
+shap_mean <- predict_parts(explainer = explain_rf, 
+                      new_observation = NewData[i,-7], 
+                                 type = "shap",
+                                    B = 25)
+shap_co2ppm[i] <- shap_mean[shap_mean$variable_name=="CO2.ppm",]$contribution[1]
+}
+end.time <- Sys.time()
+end.time-start.time
+
+save(shap_co2ppm, file="shap_co2ppm_4.5.RData")
+
+LAT<-seq(83.75,-55.75, by= -0.5)
+LONG<-seq(-179.75,179.75,by=0.5)
+
+MAT <- raster(ncol=720, nrow=280, xmn=-179.75, xmx=179.75, ymn=-55.75, ymx=83.75)
+Z <- matrix(NA, nrow=280, ncol=720)
+
+List_of_latitude<-unique(NewData$Latitude)
+
+for (i in List_of_latitude) {
+	
+LONG_i=(1:720)[LONG%in%NewData$Longitude[NewData$Latitude==i]]
+LAT_i=(1:280)[LAT==i]
+
+Z[LAT_i, LONG_i]<-shap_co2ppm[NewData$Latitude==i]
+
+}
+
+MAT<-setValues(MAT, Z)
+
+pdf(file=paste0(crop_species,"_rcp4.5_shapmap.pdf"), height=8, width=8)
+par(bty="n")
+plot(MAT, col=rev(hcl.colors(25)), breaks=seq(-1,2.4,by=0.15))
+text(0,100, paste0(crop_species," with RCP 4.5"))
+maps::map("world", add=T)
+dev.off()
+
 ```
 
