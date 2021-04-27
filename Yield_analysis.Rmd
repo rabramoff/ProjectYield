@@ -648,7 +648,7 @@ save.image(file="saved_MLs.RData")
 #############################
 ######Projection mapping#####
 #############################
-thisone = 2
+thisone = 1
 crop_species_map = crop_species[[thisone]]
 Training_map = Training_1[[thisone]]
 mod.rf.1.map <- mod.rf.1[[thisone]]
@@ -720,7 +720,14 @@ MAT<-setValues(MAT, Z)
 
 summary(Pred)
 
-#WORKING DIVERGING COLOR SCHEME!
+test_spdf <- as(MAT, "SpatialPixelsDataFrame")
+test_df <- as.data.frame(test_spdf)
+colnames(test_df) <- c("Effect", "x", "y")
+
+pdf(file=paste0(crop_species_map,"rf_noadapt_rcp4.5_nice.pdf"), height=8, width=8)
+gg1 + geom_tile(data=test_df, aes(x=x, y=y, fill=Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,100)) + ggtitle(crop_species_map)
+dev.off()
+
 pdf(file=paste0(crop_species_map,"rf_noadapt_rcp4.5.pdf"), height=8, width=8)
 par(bty="n")
 #par(fig=c(0,0.75,0.5,1))
@@ -751,16 +758,35 @@ text(-40,95, paste(round(median(Pred),2), " (", round(quantile(Pred,0.025),2), "
 #Shapley on min and max values with DALEX
 ```{r}
 #WHEN GENERALEIZE FIX FINDING MEAN!!!
+which.quantile <- function (x, probs, na.rm = FALSE){
+  if (! na.rm & any (is.na (x)))
+  return (rep (NA_integer_, length (probs)))
+
+  o <- order (x)
+  n <- sum (! is.na (x))
+  o <- o [seq_len (n)]
+
+  nppm <- n * probs - 0.5
+  j <- floor(nppm)
+  h <- ifelse((nppm == j) & ((j%%2L) == 0L), 0, 1)
+  j <- j + h
+
+  j [j == 0] <- 1
+  o[j]
+}
+
 set.seed(1234)
 summary(Training_map$Effect)
 Training_map[which.max(Training_map$Effect),]
 Training_map[which.min(Training_map$Effect),]
+Training_map[which.quantile (Training_map$Effect, 0.5),]
 
 explain_rf <- DALEX::explain(model = mod.rf.1.map,  
                         data = Training_map,
                            y = Training_map$Effect, 
                        label = "Random Forest")
 predict(explain_rf, Training_map[which.max(Training_map$Effect),])
+predict(explain_rf, Training_map[which.min(Training_map$Effect),])
 predict(explain_rf, Training_map[which.min(Training_map$Effect),])
 
 shap_min <- predict_parts(explainer = explain_rf, 
@@ -772,7 +798,7 @@ shap_max <- predict_parts(explainer = explain_rf,
                                  type = "shap",
                                     B = 25)
 shap_mean <- predict_parts(explainer = explain_rf, 
-                      new_observation = Training_map[36,-1], 
+                      new_observation = Training_map[which.quantile (Training_map$Effect, 0.5),], 
                                  type = "shap",
                                     B = 25)
 
@@ -794,21 +820,25 @@ NewData$Effect <- predict(explain_rf, NewData)
 
 ##RCP 4.5, No Adaptation
 if(drop_future){
-  NewRCP <- NewData[which.min(NewData$Effect),-c(7,8)]
+  NewRCPmin <- NewData[which.min(NewData$Effect),-c(7,8)]
+  NewRCPmax <- NewData[which.max(NewData$Effect),-c(7,8)]
+  NewRCPmean <- NewData[which.quantile (NewData$Effect, 0.5),-c(7,8)]
 } else {
-  NewRCP <- NewData[which.min(NewData$Effect),-c(8)]
+  NewRCPmin <- NewData[which.min(NewData$Effect),-c(8)]
+  NewRCPmax <- NewData[which.max(NewData$Effect),-c(8)]
+  NewRCPmean <- NewData[which.quantile (NewData$Effect, 0.5),-c(8)]
 }
 
 shap_min <- predict_parts(explainer = explain_rf, 
-                      new_observation = NewRCP, 
+                      new_observation = NewRCPmin, 
                                  type = "shap",
                                     B = 25)
 shap_max <- predict_parts(explainer = explain_rf, 
-                      new_observation = NewRCP, 
+                      new_observation = NewRCPmax, 
                                  type = "shap",
                                     B = 25)
 shap_mean <- predict_parts(explainer = explain_rf, 
-                      new_observation = NewRCP, 
+                      new_observation = NewRCPmean, 
                                  type = "shap",
                                     B = 25)
 
@@ -922,7 +952,7 @@ shap_co2ppm[i] <- shap_mean[shap_mean$variable_name=="CO2.ppm",]$contribution[1]
 end.time <- Sys.time()
 end.time-start.time
 
-save(shap_co2ppm, file="shap_co2ppm_4.5.RData")
+save(shap_co2ppm, file=paste0(crop_species_map," shap_co2ppm_4.5.RData"))
 
 LAT<-seq(83.75,-55.75, by= -0.5)
 LONG<-seq(-179.75,179.75,by=0.5)
@@ -966,7 +996,7 @@ shap_TempAvg[i] <- shap_mean[shap_mean$variable_name=="TempAvg",]$contribution[1
 end.time <- Sys.time()
 end.time-start.time
 
-save(shap_TempAvg, file="shap_TempAvg_4.5.RData")
+save(shap_TempAvg, file=paste0(crop_species_map,"shap_TempAvg_4.5.RData"))
 
 LAT<-seq(83.75,-55.75, by= -0.5)
 LONG<-seq(-179.75,179.75,by=0.5)
@@ -1012,7 +1042,7 @@ shap_Delta_temp[i] <- shap_mean[shap_mean$variable_name=="Delta_temp",]$contribu
 end.time <- Sys.time()
 end.time-start.time
 
-save(Delta_temp, file="shap_Delta_temp_4.5.RData")
+save(Delta_temp, file=paste0(crop_species_map,"shap_Delta_temp_4.5.RData"))
 
 LAT<-seq(83.75,-55.75, by= -0.5)
 LONG<-seq(-179.75,179.75,by=0.5)
@@ -1056,7 +1086,7 @@ shap_Adaptation[i] <- shap_mean[shap_mean$variable_name=="Adaptation",]$contribu
 end.time <- Sys.time()
 end.time-start.time
 
-save(Adaptation, file="shap_Adaptation_4.5.RData")
+save(Adaptation, file=paste0(crop_species_map,"shap_Adaptation_4.5.RData"))
 
 LAT<-seq(83.75,-55.75, by= -0.5)
 LONG<-seq(-179.75,179.75,by=0.5)
@@ -1134,9 +1164,6 @@ hist(shap_co2ppm, main="CO2 ppm", xlab="Shapley Value")
 hist(shap_Adaptation, main="Adaptation", xlab="Shapley Value")
 dev.off()
 ```
-
-
-
 
 #Yield gain ternary
 ```{r}
