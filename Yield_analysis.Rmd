@@ -60,16 +60,16 @@ do_iml = T
 
 #Data import
 ```{r data-import}
-datadir <- "/Users/rzabramoff/ownCloud/Collaborations/Makowski_yield/Data/"
-TAB<-read.xlsx(paste0(datadir,"Projected_Impacts_datasheet_1.3.xlsx"), sheet=1)
+datadir <- "/Users/rzabramoff/ownCloud/Collaborations/Makowski_yield/14691579/"
+mdatadir <- "/Users/rzabramoff/ownCloud/Collaborations/Makowski_yield/Data/"
+TAB<-read.xlsx(paste0(datadir,"Projected_Impacts_datasheet.xlsx"), sheet=1)
 head(TAB)
 
 #Extraction of columns
 Species<-as.factor(TAB$Crop)
-Ref<-TAB$Ref.No.
-Sample<-TAB$Sample.No.
+Ref<-TAB$Ref.No
 Delta_temp<-as.numeric(TAB$Global.delta.T.from.2005)
-Effect<-as.numeric(TAB$"Climate.impacts.relative.to.2005.(%)")
+Effect<-as.numeric(TAB$"Climate.impacts.relative.to.2005")
 CO2<-TAB$CO2
 CO2[CO2=="Yes" | CO2=="yes"]<-"Yes"
 CO2[CO2=="No"]<-"No"
@@ -77,13 +77,14 @@ CO2<-as.factor(CO2)
 CO2.ppm<-TAB$CO2.ppm-390
 CO2.ppm[CO2=="No"]<-0
 Adaptation<-as.factor(TAB$Adaptation)
-RCP<-as.factor(TAB$RCP.Scenarios)
+RCP<-as.factor(TAB$Climate.scenario)
 TempAvg<-as.numeric(TAB$Current.Average.Temperature)
 Latitude<-TAB$latitude
 Longitude<-TAB$longitude
 Baseline<-TAB$"Baseline_Mid-point"
 Future<-TAB$"Future_Mid-point"
 Future_s<-scale(Future)
+Adaptation_type <- as.factor(TAB$Adaptation.type) #WORKING
 ```
 #Maps prep
 ```{r}
@@ -648,16 +649,16 @@ save.image(file="saved_MLs.RData")
 #############################
 ######Projection mapping#####
 #############################
-thisone = 1
+thisone = 2
 crop_species_map = crop_species[[thisone]]
 Training_map = Training_1[[thisone]]
 mod.rf.1.map <- mod.rf.1[[thisone]]
 
-TAB_p<-read.csv(paste0(datadir,"tave_201120.csv"), header=T)
+TAB_p<-read.csv(paste0(mdatadir,"tave_201120.csv"), header=T)
 TAB_p<-na.omit(TAB_p)
 
 #Filter by cropping areas
-Area_crop<-read.csv(paste0(datadir,crop_species_map,"_country.csv"), header=T)
+Area_crop<-read.csv(paste0(mdatadir,crop_species_map,"_country.csv"), header=T)
 
 TAB_p_f<-right_join(Area_crop,TAB_p, by=c("x","y"))
 TAB_p_f<-TAB_p_f[TAB_p_f$Total*TAB_p_f$Flag>0,]
