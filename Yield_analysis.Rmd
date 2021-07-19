@@ -7,7 +7,7 @@ output: html_document
 ####18/02/2021####
 #Edited by Rose Abramoff - starting 22/02/2021
 ```
-```{r global-options, include=FALSE}
+```{r global-options, include=FALSE, eval=F}
 library(knitr)
 knitr::opts_chunk$set(warning=FALSE, message=FALSE)
 knitr::knit_hooks$set(time_it = local({
@@ -53,9 +53,10 @@ require(MuMIn)
 #Switches
 ```{r switches}
 same_locations = F #default is same locations
-drop_future = T
+drop_future = F
 crop_species = c("Maize","Rice","Wheat","Soybean")
 do_iml = T
+adaptation_types = F
 ```
 
 #Data import
@@ -84,7 +85,17 @@ Longitude<-TAB$longitude
 Baseline<-TAB$"Baseline_Mid-point"
 Future<-TAB$"Future_Mid-point"
 Future_s<-scale(Future)
-Adaptation_type <- as.factor(TAB$Adaptation.type) #WORKING
+
+if(adaptation_types){
+Adaptation <- as.factor(TAB$Adaptation.type) #WORKING
+# Fertiliser <- as.factor(TAB$Fertiliser)
+# Irrigation <- as.factor(TAB$Irrigation)
+# Cultivar <- as.factor(TAB$Cultivar)
+# Soil_organic_matter_management <- as.factor(TAB$Soil.organic.matter.management)
+# Planting_time <- as.factor(TAB$Planting.time)
+# Tillage <- as.factor(TAB$Tillage)
+# Others <- as.factor(TAB$Others)
+}
 ```
 #Maps prep
 ```{r}
@@ -96,7 +107,7 @@ xlabels <- makelabelsEW(xbreaks)
 ybreaks <- seq(-90,90,30)
 ylabels <- makelabelsNS(ybreaks)
 gg1 <- ggplot() + 
-  geom_polygon(data = wrld, aes(x=long, y = lat, group = group), fill = NA, color = "black") + 
+  geom_polygon(data = wrld, aes(x=long, y = lat, group = group), fill = "lightgray", color = "black") + 
   coord_fixed(1.3) + 
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
 panel.background = element_blank(), axis.line = element_line(colour = "black"), axis.ticks = element_blank(), legend.position="bottom",legend.title=element_text(size=15), 
@@ -106,6 +117,7 @@ panel.background = element_blank(), axis.line = element_line(colour = "black"), 
 
 map_of_df <- function(DATA,crop_species){
 gg1 + geom_point(data=DATA, aes(x=Longitude, y=Latitude, color=Effect), pch=16, size=1) + scale_color_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,100)) + ggtitle(crop_species)
+#gg1 + geom_point(data=DATA, aes(x=Longitude, y=Latitude, fill=Effect), color="black", pch=21, size=1) + scale_fill_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,100)) + ggtitle(crop_species)
 }
 
 hist_of_df <- function(DATA,crop_species){
@@ -115,6 +127,55 @@ ggplot(data=DATA, aes(x=Effect)) +
 
 map_testing_training <- function(DATA,crop_species){
 gg1 + geom_point(data=Training_1[[i]], aes(x=Longitude, y=Latitude), color="darkblue", pch=16, size=1) + geom_point(data=Testing_1[[i]], aes(x=Longitude, y=Latitude), color="darkred", pch=16, size=1) + ggtitle(crop_species)
+}
+```
+
+#Load multiplot
+```{r}
+# Multiple plot function
+#
+# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+# - cols:   Number of columns in layout
+# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+#
+# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+# then plot 1 will go in the upper left, 2 will go in the upper right, and
+# 3 will go all the way across the bottom.
+#
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
 }
 ```
 
@@ -140,6 +201,10 @@ if(drop_future){
 } else {
   DATA<-data.frame(Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg, Future, Latitude, Longitude)
 }
+
+# #WORKING
+# DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,TempAvg, y=Latitude, x=Longitude, Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others)
+# DATA<-data.frame(Effect,Species,Delta_temp,CO2.ppm,TempAvg, Future, Latitude, Longitude,Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others)
 
 df <- NULL
 df_lm <- NULL
@@ -192,8 +257,7 @@ if(same_locations){
     DATA_sample2<-DATA_sample[-ID_1,]}
     #Sample one data per location
     new_data <- DATA_sample2 %>% group_by(Loc) %>% sample_n(1)
-    ID<-new_data$ID
-} else {
+    ID<-new_data$ID} else {
   #Split using different locations
   Loc<-paste(df[[i]]$Longitude,df[[i]]$Latitude, sep="_")
   UnLoc<-unique(Loc)
@@ -208,8 +272,13 @@ Testing_1[[i]]<-df[[i]][ID,]
 Training_2[[i]]<-df_lm[[i]][-ID,]
 Testing_2[[i]]<-df_lm[[i]][ID,]
 
+#WORKING - tillage is missing for maize, and possibly there are other treatments not present in the training set
+#break out combined?
+summary(Training_2[[1]]$Adaptation)
+summary(Testing_2[[1]]$Adaptation)
+
 #Map of data
-pdf(file=paste0(crop_species[[i]],"_testing_training.pdf"), height=4, width=5)
+pdf(file=paste0(crop_species[[i]],"_samelocs",same_locations,"_testing_training.pdf"), height=4, width=5)
 print(map_testing_training(df[[i]],crop_species[i]))
 dev.off()
 print(map_testing_training(df[[i]],crop_species[i]))
@@ -260,16 +329,14 @@ effs <- FeatureEffects$new(predictor, method="pdp")
 shapley <- Shapley$new(predictor, x.interest = Training[1,-1])
 
 #plots
-print(plot(imp) + ggtitle(paste0(PlotTitle," ",crop_species)))
-print(plot(interact) + ggtitle(paste0(PlotTitle," ",crop_species)))
-print(plot(effs) + ggtitle(paste0(PlotTitle," ",crop_species)))
-print(shapley$plot() + ggtitle(paste0(PlotTitle," ",crop_species)))
+print(plot(imp) + ggtitle(paste0(PlotTitle," ",crop_species[i])))
+print(plot(interact) + ggtitle(paste0(PlotTitle," ",crop_species[i])))
+print(plot(effs) + ggtitle(paste0(PlotTitle," ",crop_species[i])))
+print(shapley$plot() + ggtitle(paste0(PlotTitle," ",crop_species[i])))
 }
 
 Pred_ml<-predict(mod_ml, data=Testing)$predictions
-RMSEP_ml=sqrt(mean((Testing$Effect-Pred_ml)^2))
-print(plot(Testing$Effect,Pred_ml))
-return(RMSEP_ml)
+return(Pred_ml)
 }
 
 do_iml_gbm <- function(predictor, mod_ml, Training, Testing, PlotTitle){
@@ -296,9 +363,7 @@ print(plot(effs) + ggtitle(paste0(PlotTitle," ",crop_species)))
 print(shapley$plot() + ggtitle(paste0(PlotTitle," ",crop_species)))
 
 Pred_ml<-predict(mod_ml, newdata=Testing)
-RMSEP_ml=sqrt(mean((Testing$Effect-Pred_ml)^2))
-print(plot(Testing$Effect,Pred_ml))
-return(RMSEP_ml)
+return(Pred_ml)
 }
 ```
 
@@ -307,7 +372,9 @@ return(RMSEP_ml)
 ```{r spatial-rf}
 mod.rf.xy <- NULL
 RMSEP_rf_xy <- NULL
+R2_rf_xy_int <- NULL
 R2_rf_xy <- NULL
+Pred_rf_xy <- NULL
 for(i in 1:length(crop_species)){
 set.seed(1234)
 mod.rf.xy[[i]] <- ranger(Effect~., data=Training_xy[[i]], num.trees=1000)
@@ -316,8 +383,11 @@ print(mod.rf.xy[[i]])
 
 predictor.rf.xy <- Predictor$new(model = mod.rf.xy[[i]], data = Training_xy[[i]][-1], y = Training_xy[[i]]$Effect, predict.fun = pfun)
 
-RMSEP_rf_xy[[i]] <- do_iml_rf(predictor.rf.xy, mod.rf.xy[[i]], Training_xy[[i]], Testing_xy[[i]], PlotTitle="Spatial RF")
-R2_rf_xy[[i]] <- mod.rf.xy[[i]]$r.squared
+Pred_rf_xy[[i]] <- do_iml_rf(predictor.rf.xy, mod.rf.xy[[i]], Training_xy[[i]], Testing_xy[[i]], PlotTitle="Spatial RF")
+RMSEP_rf_xy[[i]]=sqrt(mean((Testing_xy[[i]]$Effect-Pred_rf_xy[[i]])^2))
+print(plot(Testing_xy[[i]]$Effect,Pred_rf_xy[[i]]))
+R2_rf_xy_int[[i]] <- mod.rf.xy[[i]]$r.squared
+R2_rf_xy[[i]] <- 1 - sum( (Testing_xy[[i]]$Effect-Pred_rf_xy[[i]])^2 ) / sum( (Testing_xy[[i]]$Effect - mean(Testing_xy[[i]]$Effect))^2 )
 }
 ```
 
@@ -325,6 +395,8 @@ R2_rf_xy[[i]] <- mod.rf.xy[[i]]$r.squared
 ```{r, spatial-gbm}
 mod.gbm.xy <- NULL
 RMSEP_gbm_xy <- NULL
+Pred_gbm_xy <- NULL
+R2_gbm_xy_int <- NULL
 R2_gbm_xy <- NULL
 for(i in 1:length(crop_species)){
 mod.gbm.xy[[i]] <- do_GBM(Training_xy[[i]])
@@ -333,14 +405,20 @@ print(mod.gbm.xy[[i]])
 
 predictor.gbm.xy <- Predictor$new(model = mod.gbm.xy[[i]], data = Training_xy[[i]][-1], y = Training_xy[[i]]$Effect)
 
-RMSEP_gbm_xy[[i]] <- do_iml_gbm(predictor.gbm.xy, mod.gbm.xy[[i]], Training_xy[[i]], Testing_xy[[i]], PlotTitle="Spatial GBM")
-R2_gbm_xy[[i]] <- mod.gbm.xy[[i]][4]$results$Rsquared[which.min(mod.gbm.xy[[i]][4]$results$RMSE)]
+Pred_gbm_xy[[i]] <- do_iml_gbm(predictor.gbm.xy, mod.gbm.xy[[i]], Training_xy[[i]], Testing_xy[[i]], PlotTitle="Spatial GBM")
+RMSEP_gbm_xy[[i]]=sqrt(mean((Testing_xy[[i]]$Effect-Pred_gbm_xy[[i]])^2))
+print(plot(Testing_xy[[i]]$Effect,Pred_gbm_xy[[i]]))
+R2_gbm_xy_int[[i]] <- mod.gbm.xy[[i]][4]$results$Rsquared[which.min(mod.gbm.xy[[i]][4]$results$RMSE)]
+R2_gbm_xy[[i]] <- 1 - sum( (Testing_xy[[i]]$Effect-Pred_gbm_xy[[i]])^2 ) / sum( (Testing_xy[[i]]$Effect - mean(Testing_xy[[i]]$Effect))^2 )
+
 }
 ```
 
 ###Climate RF
 ```{r climate-rf}
 mod.rf.0 <- NULL
+Pred_rf_0 <- NULL
+R2_rf_0_int <- NULL
 RMSEP_rf_0 <- NULL
 R2_rf_0 <- NULL
 Training_0 <- NULL
@@ -355,12 +433,15 @@ print(mod.rf.0[[i]])
 
 predictor.rf.0 <- Predictor$new(mod.rf.0[[i]], data = Training_0[[i]][-1], y = Training_0[[i]]$Effect, predict.fun = pfun)
 
-RMSEP_rf_0[[i]] <- do_iml_rf(predictor.rf.0, mod.rf.0[[i]], Training_0[[i]], Testing_1[[i]], PlotTitle="Climate RF")
-R2_rf_0[[i]] <- mod.rf.0[[i]]$r.squared
+Pred_rf_0[[i]] <- do_iml_rf(predictor.rf.0, mod.rf.0[[i]], Training_0[[i]], Testing_1[[i]], PlotTitle="Climate RF")
+RMSEP_rf_0[[i]]=sqrt(mean((Testing_1[[i]]$Effect-Pred_rf_0[[i]])^2))
+print(plot(Testing_1[[i]]$Effect,Pred_rf_0[[i]]))
+R2_rf_0_int[[i]] <- mod.rf.0[[i]]$r.squared
+R2_rf_0[[i]] <- 1 - sum( (Testing_1[[i]]$Effect-Pred_rf_0[[i]])^2 ) / sum( (Testing_1[[i]]$Effect - mean(Testing_1[[i]]$Effect))^2 )
 
 X0<- predict(mod.rf.0[[i]], data=Training_1[[i]])$predictions
 Training_2_bis[[i]]<-cbind(Training_2[[i]],X0)
-Pred_rf_0[[i]]<-predict(mod.rf.0[[i]], data=Testing_1[[i]])$predictions
+#Pred_rf_0[[i]]<-predict(mod.rf.0[[i]], data=Testing_1[[i]])$predictions
 
 if(do_iml){
 imp <- FeatureImp$new(predictor.rf.0, loss = "mae")
@@ -384,20 +465,20 @@ ylabs = "Yield Change"
 ylims = range(efdf$YieldChange)+range(efdf$YieldChange)*0.1
 layout.matrix <- matrix(c(1, 2, 3, 4), nrow = 1, ncol = 4)
 
-pdf(file=paste0(crop_species[[i]]," PDPs.pdf"), height=2, width=8)
+pdf(file=paste0(crop_species[[i]],"_samelocs",same_locations," PDPs.pdf"), height=2, width=8)
 layout(mat = layout.matrix,
        heights = c(1,1,1,1), # Heights of the two rows
        widths = c(2.65,2,2,2)) # Widths of the two columns
 #layout.show(4) 
 par(oma=c(0,0,0,0)) # all sides have 3 lines of space
-par(mar=c(5,5,0,0) + 0.1)
+par(mar=c(6,5,0,0) + 0.1)
 plot(effs$results$TempAvg$.borders, effs$results$TempAvg$.value, type = "l", ylab=ylabs, xlab=expression("Average Temperature"~degree~"C"), ylim=ylims)
-par(mar=c(5,1,0,0) + 0.1)
+par(mar=c(6,1,0,0) + 0.1)
 plot(effs$results$Delta_temp$.borders, effs$results$Delta_temp$.value, type = "l", ylab="", xlab=expression(Delta~" Temperature"~degree~"C"), ylim=ylims, yaxt='n')
-par(mar=c(5,1,0,0) + 0.1)
-plot(effs$results$CO2.ppm$.borders, effs$results$CO2.ppm$.value, type = "l", ylab="", xlab=expression("CO"[2]~"ppm"), ylim=ylims, yaxt='n')
-par(mar=c(5,1,0,0) + 0.1)
-plot(effs$results$Adaptation$.borders, effs$results$Adaptation$.value, type = "l", ylab="", xlab="Adaptation", ylim=ylims, yaxt='n')
+par(mar=c(6,1,0,0) + 0.1)
+plot(effs$results$CO2.ppm$.borders, effs$results$CO2.ppm$.value, type = "l", ylab="", xlab=expression(Delta~"CO"[2]~"ppm above 390 ppm"), ylim=ylims, yaxt='n')
+par(mar=c(6,1,0,0) + 0.1)
+plot(effs$results$Adaptation$.borders, effs$results$Adaptation$.value, type = "l", ylab="", xlab="", ylim=ylims, yaxt='n', las=2)
 dev.off()
 
 # #specify two-way interactions
@@ -420,7 +501,9 @@ dev.off()
 ###Climate GBM
 ```{r climate-gbm}
 mod.gbm.0 <- NULL
+Pred_gbm_0 <- NULL
 RMSEP_gbm_0 <- NULL
+R2_gbm_0_int <- NULL
 R2_gbm_0 <- NULL
 for(i in 1:length(crop_species)){
 mod.gbm.0[[i]] <- do_GBM(Training_0[[i]])
@@ -429,8 +512,11 @@ print(mod.gbm.0[[i]])
 
 predictor.gbm.0 <- Predictor$new(mod.gbm.0[[i]], data = Training_0[[i]][-1], y = Training_0[[i]]$Effect)
 
-RMSEP_gbm_0[[i]] <- do_iml_gbm(predictor.gbm.0, mod.gbm.0[[i]], Training_0[[i]], Testing_1[[i]], PlotTitle="Climate GBM")
-R2_gbm_0[[i]] <- mod.gbm.0[[i]][4]$results$Rsquared[which.min(mod.gbm.0[[i]][4]$results$RMSE)]
+Pred_gbm_0[[i]] <- do_iml_gbm(predictor.gbm.0, mod.gbm.0[[i]], Training_0[[i]], Testing_1[[i]], PlotTitle="Climate GBM")
+RMSEP_gbm_0[[i]]=sqrt(mean((Testing_1[[i]]$Effect-Pred_gbm_0[[i]])^2))
+print(plot(Testing_1[[i]]$Effect,Pred_gbm_0[[i]]))
+R2_gbm_0_int[[i]] <- mod.gbm.0[[i]][4]$results$Rsquared[which.min(mod.gbm.0[[i]][4]$results$RMSE)]
+R2_gbm_0[[i]] <- 1 - sum( (Testing_1[[i]]$Effect-Pred_gbm_0[[i]])^2 ) / sum( (Testing_1[[i]]$Effect - mean(Testing_1[[i]]$Effect))^2 )
 }
 ```
 
@@ -438,6 +524,8 @@ R2_gbm_0[[i]] <- mod.gbm.0[[i]][4]$results$Rsquared[which.min(mod.gbm.0[[i]][4]$
 ```{r, climate-longlat-rf}
 mod.rf.1 <- NULL
 RMSEP_rf_1 <- NULL
+Pred_rf_1 <- NULL
+R2_rf_1_int <- NULL
 R2_rf_1 <- NULL
 for(i in 1:length(crop_species)){
 set.seed(1234)
@@ -451,8 +539,12 @@ print(mod.rf.1[[i]])
 
 predictor.rf.1 <- Predictor$new(mod.rf.1[[i]], data = Training_1[[i]][-1], y = Training_1[[i]]$Effect, predict.fun = pfun)
 
-RMSEP_rf_1[[i]] <- do_iml_rf(predictor.rf.1, mod.rf.1[[i]], Training_1[[i]], Testing_1[[i]], PlotTitle="Climate+LongLat RF")
-R2_rf_1[[i]] <- mod.rf.1[[i]]$r.squared
+Pred_rf_1[[i]] <- do_iml_rf(predictor.rf.1, mod.rf.1[[i]], Training_1[[i]], Testing_1[[i]], PlotTitle="Climate+LongLat RF")
+RMSEP_rf_1[[i]]=sqrt(mean((Testing_1[[i]]$Effect-Pred_rf_1[[i]])^2))
+print(plot(Testing_1[[i]]$Effect,Pred_rf_1[[i]]))
+R2_rf_1_int[[i]] <- mod.rf.1[[i]]$r.squared
+R2_rf_1[[i]] <- 1 - sum( (Testing_1[[i]]$Effect-Pred_rf_1[[i]])^2 ) / sum( (Testing_1[[i]]$Effect - mean(Testing_1[[i]]$Effect))^2 )
+
 }
 ```
 
@@ -460,6 +552,8 @@ R2_rf_1[[i]] <- mod.rf.1[[i]]$r.squared
 ```{r climate-longlat-gbm}
 mod.gbm.1 <- NULL
 RMSEP_gbm_1 <- NULL
+Pred_gbm_1 <- NULL
+R2_gbm_1_int <- NULL
 R2_gbm_1 <- NULL
 for(i in 1:length(crop_species)){
 mod.gbm.1[[i]] <- do_GBM(Training_1[[i]])
@@ -468,8 +562,11 @@ print(mod.gbm.1[[i]])
 
 predictor.gbm.1 <- Predictor$new(mod.gbm.1[[i]], data = Training_1[[i]][-1], y = Training_1[[i]]$Effect)
 
-RMSEP_gbm_1[[i]] <- do_iml_gbm(predictor.gbm.1, mod.gbm.1[[i]], Training_1[[i]], Testing_1[[i]], PlotTitle="Climate+LongLat GBM")
-R2_gbm_1[[i]] <- mod.gbm.1[[i]][4]$results$Rsquared[which.min(mod.gbm.1[[i]][4]$results$RMSE)]
+Pred_gbm_1[[i]] <- do_iml_gbm(predictor.gbm.1, mod.gbm.1[[i]], Training_1[[i]], Testing_1[[i]], PlotTitle="Climate+LongLat GBM")
+RMSEP_gbm_1[[i]]=sqrt(mean((Testing_1[[i]]$Effect-Pred_gbm_1[[i]])^2))
+print(plot(Testing_1[[i]]$Effect,Pred_gbm_1[[i]]))
+R2_gbm_1_int[[i]] <- mod.gbm.1[[i]][4]$results$Rsquared[which.min(mod.gbm.1[[i]][4]$results$RMSE)]
+R2_gbm_1[[i]] <- 1 - sum( (Testing_1[[i]]$Effect-Pred_gbm_1[[i]])^2 ) / sum( (Testing_1[[i]]$Effect - mean(Testing_1[[i]]$Effect))^2 ) 
 }
 ```
 
@@ -479,6 +576,7 @@ R2_gbm_1[[i]] <- mod.gbm.1[[i]][4]$results$Rsquared[which.min(mod.gbm.1[[i]][4]$
 mod_lm <- NULL
 RMSEP_lm <- NULL
 R2_lm <- NULL
+#R2_lm_OPT <- NULL
 for(i in 1:length(crop_species)){
 #Linear model climate
 if(same_locations){
@@ -498,15 +596,16 @@ print(crop_species[[i]])
 print(summary(mod_lm[[i]]))
 
 if(same_locations){
-  Pred_lm<-predict(mod_lm[[i]], newdata=Testing_2[[i]])
+  Pred_lm<-predict(mod_lm[[i]], newdata=Testing_2[[i]]) #removed random effect on Jul 5, 2021
 } else {
-  Pred_lm<-predict(mod_lm[[i]], newdata=Testing_2[[i]], re.form=NA)
+  Pred_lm<-predict(mod_lm[[i]], newdata=Testing_2[[i]], re.form=NA) #NA means include no random effects
 }
 
 RMSEP_lm[[i]]=sqrt(mean((Testing_2[[i]]$Effect-Pred_lm)^2))
 print(plot(Testing_2[[i]]$Effect,Pred_lm))
 #R2_lm[[i]] <- r.squaredGLMM(mod_lm[[i]])[1]
 R2_lm[[i]] <- 1 - sum( (Testing_2[[i]]$Effect-Pred_lm)^2 ) / sum( (Testing_2[[i]]$Effect - mean(Testing_2[[i]]$Effect))^2 )
+#R2_lm_OPT[[i]] <- 1 - sum( (Testing_2[[i]]$Effect-Pred_lm)^2 ) / ( sum(Testing_2[[i]]$Effect^2) - (sum(Testing_2[[i]]$Effect)^2 / length(Testing_2[[i]]$Effect)) ) #same
 }
 ```
 
@@ -534,7 +633,7 @@ print(crop_species[[i]])
 print(summary(mod_lm_ints[[i]]))
 
 if(same_locations){
-  Pred_lm_ints<-predict(mod_lm_ints[[i]], newdata=Testing_2[[i]])
+  Pred_lm_ints<-predict(mod_lm_ints[[i]], newdata=Testing_2[[i]], re.form=NA) #removed random effect on Jul 5, 2021
 } else {
   Pred_lm_ints<-predict(mod_lm_ints[[i]], newdata=Testing_2[[i]], re.form=NA)
 }
@@ -608,42 +707,205 @@ R2_spa_rf[[i]] <- 1 - sum( (Testing_2[[i]]$Effect-Pred_spa_rf)^2 ) / sum( (Testi
 
 ##Summarize RMSE
 ```{r}
+# NAME<-c("RF long lat","GBM long lat",
+#         "RF climate","GBM climate",
+#         "RF climate + long lat","GBM climate + long lat",
+#         "Linear model climate",
+#         "Linear model climate + interactions",
+#         "Spatial linear model","Spatial linear model + climate","Spatial linear model + RF outputs")
+
 NAME<-c("RF long lat","GBM long lat",
         "RF climate","GBM climate",
-        "RF climate + long lat","GBM climate + long lat",
-        "Linear model climate",
-        "Linear model climate + interactions",
-        "Spatial linear model","Spatial linear model + climate","Spatial linear model + RF outputs")
+        "RF climate + long lat","GBM climate + long lat")
 
 RESULT <- NULL
-for(i in 1:length(crop_species)){
+for(i in 1:4){
 RMSEP <- c(RMSEP_rf_xy[[i]],RMSEP_gbm_xy[[i]],
 RMSEP_rf_0[[i]],RMSEP_gbm_0[[i]],
-RMSEP_rf_1[[i]],RMSEP_gbm_1[[i]],
-RMSEP_lm[[i]],
-RMSEP_lm_ints[[i]],
-RMSEP_spa_0[[i]],
-RMSEP_spa_lm[[i]],
-RMSEP_spa_rf[[i]])
+RMSEP_rf_1[[i]],RMSEP_gbm_1[[i]])
 
 R2 <- c(R2_rf_xy[[i]],R2_gbm_xy[[i]],
 R2_rf_0[[i]],R2_gbm_0[[i]],
-R2_rf_1[[i]],R2_gbm_1[[i]],
-R2_lm[[i]],
-R2_lm_ints[[i]],
-R2_spa_0[[i]],
-R2_spa_lm[[i]],
-R2_spa_rf[[i]])
+R2_rf_1[[i]],R2_gbm_1[[i]])
 
-RESULT[[i]]<-data.frame(NAME,RMSEP,R2)
+crop_species_col <- rep(crop_species[[i]], length(R2))
+
+RESULT[[i]]<-data.frame(NAME,RMSEP,R2, crop_species_col)
 print(crop_species[[i]])
 print(RESULT[[i]])
-write.csv(file=paste0(crop_species[[i]],"_stats.csv"),RESULT[[i]])
+#write.csv(file=paste0(crop_species[[i]],"_samelocs",same_locations,"_dropfuture",drop_future,"_adaptationtypes",adaptation_types,"_stats.csv"),RESULT[[i]])
 }
 
-save.image(file="saved_MLs.RData")
+# for(i in 1:4){
+# RMSEP <- c(RMSEP_rf_xy[[i]],RMSEP_gbm_xy[[i]],
+# RMSEP_rf_0[[i]],RMSEP_gbm_0[[i]],
+# RMSEP_rf_1[[i]],RMSEP_gbm_1[[i]],
+# RMSEP_lm[[i]],
+# RMSEP_lm_ints[[i]],
+# RMSEP_spa_0[[i]],
+# RMSEP_spa_lm[[i]],
+# RMSEP_spa_rf[[i]])
+# 
+# R2 <- c(R2_rf_xy[[i]],R2_gbm_xy[[i]],
+# R2_rf_0[[i]],R2_gbm_0[[i]],
+# R2_rf_1[[i]],R2_gbm_1[[i]],
+# R2_lm[[i]],
+# R2_lm_ints[[i]],
+# R2_spa_0[[i]],
+# R2_spa_lm[[i]],
+# R2_spa_rf[[i]])
+# 
+# crop_species_col <- rep(crop_species[[i]], length(R2))
+# 
+# RESULT[[i]]<-data.frame(NAME,RMSEP,R2, crop_species_col)
+# print(crop_species[[i]])
+# print(RESULT[[i]])
+# #write.csv(file=paste0(crop_species[[i]],"_samelocs",same_locations,"_dropfuture",drop_future,"_adaptationtypes",adaptation_types,"_stats.csv"),RESULT[[i]])
+# }
+
+RESULT_ALL <- rbind(RESULT[[1]], RESULT[[2]],RESULT[[3]], RESULT[[4]])
+write.csv(file=paste0("samelocs",same_locations,"_dropfuture",drop_future,"_adaptationtypes",adaptation_types,"_stats.csv"),RESULT_ALL)
+save.image(file=paste0("saved_MLs_samelocs",same_locations,"_dropfuture",drop_future,"_adaptationtypes",adaptation_types,".RData"))
 ```
-#STOPPED HERE
+#STOPPED HERE with all crops streamline
+#Generate maps IDEALIZED
+```{r}
+#############################
+######Projection mapping#####
+#############################
+thisone = 1
+crop_species_map = crop_species[[thisone]]
+Training_map = Training_1[[thisone]]
+mod.rf.1.map <- mod.rf.1[[thisone]]
+
+TAB_p<-read.csv(paste0(mdatadir,"tave_201120.csv"), header=T)
+TAB_p<-na.omit(TAB_p)
+
+#Filter by cropping areas
+Area_crop<-read.csv(paste0(mdatadir,crop_species_map,"_country.csv"), header=T)
+
+TAB_p_f<-right_join(Area_crop,TAB_p, by=c("x","y"))
+TAB_p_f<-TAB_p_f[TAB_p_f$Total*TAB_p_f$Flag>0,]
+N<-nrow(TAB_p_f)
+
+#WORKING LOOP IT
+map_of_scenario <- function(Delta_temp_level, CO2.ppm_level, Adaptation_level){
+NewData <- data.frame(Delta_temp=rep(Delta_temp_level, N),CO2.ppm=rep(CO2.ppm_level,N),Adaptation=rep(Adaptation_level,N),TempAvg=TAB_p_f$Tave, Latitude=TAB_p_f$y, Longitude=TAB_p_f$x)
+
+#Prediction RF
+Pred_rf<-predict(mod.rf.1.map,data=NewData)
+
+#Whole map
+Pred=Pred_rf$predictions
+
+LAT<-seq(83.75,-55.75, by= -0.5)
+LONG<-seq(-179.75,179.75,by=0.5)
+
+MAT <- raster(ncol=720, nrow=280, xmn=-179.75, xmx=179.75, ymn=-55.75, ymx=83.75)
+Z <- matrix(NA, nrow=280, ncol=720)
+
+List_of_latitude<-unique(NewData$Latitude)
+
+for (i in List_of_latitude) {
+	
+LONG_i=(1:720)[LONG%in%NewData$Longitude[NewData$Latitude==i]]
+LAT_i=(1:280)[LAT==i]
+
+Z[LAT_i, LONG_i]<-Pred[NewData$Latitude==i]
+
+}
+
+MAT<-setValues(MAT, Z)
+
+test_spdf <- as(MAT, "SpatialPixelsDataFrame")
+test_df <- as.data.frame(test_spdf)
+colnames(test_df) <- c("Effect", "x", "y")
+test_df$Delta_temp_level <- rep(Delta_temp_level, dim(test_df)[1])
+test_df$CO2.ppm_level <- rep(CO2.ppm_level, dim(test_df)[1])
+test_df$Adaptation_level <- rep(Adaptation_level, dim(test_df)[1])
+
+return(test_df)
+
+#WORKING save df and make into one big df and use facets for plotting
+
+#pdf(file=paste0(crop_species_map,"_",Delta_temp_level,"_", CO2.ppm_level,"_", Adaptation_level,".pdf"), height=8, width=8)
+#print(gg1 + geom_tile(data=test_df, aes(x=x, y=y, fill=Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,100)) + ggtitle(crop_species_map))
+# gg2 <- gg1 + geom_tile(data=test_df, aes(x=x, y=y, fill=Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,100)) #+ ggtitle(crop_species_map)
+# return(gg2)
+#dev.off()
+
+# pdf(file=paste0(crop_species_map,"_",Delta_temp_level,"_", CO2.ppm_level,"_", Adaptation_level,"_lowfi.pdf"), height=8, width=8)
+# par(bty="n")
+# plot(MAT, col=rev(hcl.colors(25)), breaks=seq(-80,40,by=5))
+# text(0,100, paste0(crop_species_map,""))
+# maps::map("world", add=T)
+# dev.off()
+}
+
+# #Delta_temp_level = 2; CO2.ppm_level=0; Adaptation_level=1
+# Delta_temp_levels = rep(c(1.5, 2, 3), 4)
+# CO2.ppm_levels = rep(c(rep(0,3), rep(210,3)),2)
+# Adaptation_levels = c(rep(1,6), rep(2,6))
+
+map_df <- NULL
+for(i in 1:12){
+  map_df[[i]] <- map_of_scenario(Delta_temp_levels[i], CO2.ppm_levels[i], Adaptation_levels[i])
+}
+
+map_df_all <- rbind(map_df[[1]], map_df[[2]], map_df[[3]], map_df[[4]], map_df[[5]], map_df[[6]], map_df[[7]], map_df[[8]], map_df[[9]], map_df[[10]], map_df[[11]], map_df[[12]]) 
+
+map1.5 <- map_df_all[map_df_all$Delta_temp_level == "1.5",]
+map2 <- map_df_all[map_df_all$Delta_temp_level == "2",]
+map3 <- map_df_all[map_df_all$Delta_temp_level == "3",]
+
+# New facet label names for Adaptation variable
+adpt.labs <- c("No Adaptation", "Adaptation")
+names(adpt.labs) <- c("1", "2")
+
+# New facet label names for CO2 variable
+co2.labs <- c("390ppm", "600ppm")
+names(co2.labs) <- c("0", "210")
+
+plot_it_noleg <- function(mapNum, gglabel) {gg1 + geom_tile(data=mapNum, aes(x=x, y=y, fill=Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,100), guide = F) + 
+  ggtitle(paste0(crop_species_map,": +", gglabel, "°C")) +
+  facet_grid(Adaptation_level ~ CO2.ppm_level, labeller = labeller(Adaptation_level = adpt.labs, CO2.ppm_level = co2.labs)) +
+        theme(#text=element_text(size=8), #change font size of all text
+        axis.text.x=element_text(size=8, angle = 45, vjust = 0.5), #change font size of axis text
+        axis.text.y=element_text(size=8), #change font size of axis titles
+        plot.title=element_text(size=8), #change font size of plot title
+        legend.text=element_text(size=8), #change font size of legend text
+        legend.title=element_text(size=8)) #change font size of legend title
+}
+
+plot_it <- function(mapNum, gglabel) {gg1 + geom_tile(data=mapNum, aes(x=x, y=y, fill=Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,100)) + 
+  ggtitle(paste0(crop_species_map,": +", gglabel, "°C")) +
+  facet_grid(Adaptation_level ~ CO2.ppm_level, labeller = labeller(Adaptation_level = adpt.labs, CO2.ppm_level = co2.labs)) +
+        theme(#text=element_text(size=8), #change font size of all text
+        axis.text.x=element_text(size=8, angle = 45, vjust = 0.5), #change font size of axis text
+        axis.text.y=element_text(size=8), #change font size of axis titles
+        plot.title=element_text(size=8), #change font size of plot title
+        legend.text=element_text(size=8), #change font size of legend text
+        legend.title=element_text(size=8)) #change font size of legend title
+}
+
+gg1.5 <- plot_it_noleg(map1.5, "1.5")
+gg2 <- plot_it_noleg(map2, "2")
+gg3 <- plot_it_noleg(map3, "3")
+
+pdf(file=paste0(crop_species_map,".pdf"), height=6, width=8)
+#pdf(file=paste0(crop_species_map,".pdf"), height=11, width=8)
+#multiplot(gg1.5, gg2, gg3, cols=1)
+multiplot(gg1.5, gg3, gg2, cols=2)
+dev.off()
+
+pdf(file="legend.pdf", height=11, width=8)
+plot_it(map1.5, "1.5")
+dev.off()
+#2 = Yes, 1 = No (Yes is default??) #If adapt looks same then forgot to run model as Yes/No
+
+#multiplot(ggmap[[1]], ggmap[[2]], ggmap[[3]], ggmap[[4]], ggmap[[5]], ggmap[[6]], ggmap[[7]], ggmap[[8]], ggmap[[9]], ggmap[[10]], ggmap[[11]], ggmap[[12]], cols=3)
+```
+
 #Generate maps
 ```{r}
 #############################
