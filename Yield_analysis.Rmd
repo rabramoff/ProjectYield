@@ -52,11 +52,11 @@ require(MuMIn)
 
 #Switches
 ```{r switches}
-same_locations = F #default is same locations
-drop_future = F
+same_locations = T #default is same locations
 crop_species = c("Maize","Rice","Wheat","Soybean")
 do_iml = T
 adaptation_types = F
+do_maps = F
 ```
 
 #Data import
@@ -183,24 +183,12 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
 ```{r, prep-data}
 if(same_locations){
   Loca<-paste(Longitude,Latitude, sep="_") 
-  if(drop_future){
     DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg, y=Latitude, x=Longitude, Loca)
-  }else{
-    DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg, Future, y=Latitude, x=Longitude, Loca)
-    }
 } else {
-    if(drop_future){
-      DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg, y=Latitude, x=Longitude)
-    }else{
-      DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg, Future, y=Latitude, x=Longitude)
-    }
+    DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg, y=Latitude, x=Longitude)
 }
 
-if(drop_future){
   DATA<-data.frame(Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg, Latitude, Longitude)
-} else {
-  DATA<-data.frame(Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg, Future, Latitude, Longitude)
-}
 
 # #WORKING
 # DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,TempAvg, y=Latitude, x=Longitude, Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others)
@@ -224,13 +212,12 @@ df_lm[[i]]<-DATA_lm[DATA_lm$Species==crop_species[i],]
 df_lm[[i]]<-na.omit(df_lm[[i]])
 #Remove Species
 df[[i]]<-df[[i]][ , -which(names(df[[i]]) %in% c("Species"))]
-#print(summary(df[[i]]))
 df_lm[[i]]<-df_lm[[i]][ , -which(names(df_lm[[i]]) %in% c("Species"))]
-#print(summary(df_lm[[i]]))
 
 #Only x and y
 df_xy[[i]]<-df[[i]][ , which(names(df[[i]]) %in% c("Effect","Latitude","Longitude"))]
 
+if(do_maps){
 pdf(file=paste0(crop_species[[i]],"_effects_meta.pdf"), height=4, width=5)
 print(map_of_df(df[[i]],crop_species[i]))
 dev.off()
@@ -240,8 +227,9 @@ pdf(file=paste0(crop_species[[i]],"_effects_hist.pdf"), height=3, width=3)
 print(hist_of_df(df[[i]],crop_species[i]))
 dev.off()
 print(hist_of_df(df[[i]],crop_species[i]))
+}
 
-set.seed(1234)
+set.seed(123)
 Loc<-paste(df[[i]]$Longitude,df[[i]]$Latitude, sep="_")
 Locs[[i]] <- Loc
 
@@ -252,14 +240,15 @@ if(same_locations){
   #Remove locations including one data only
   Loc_1<-names(table(DATA_sample$Loc))[as.numeric(table(DATA_sample$Loc))<2]
   DATA_sample2<-DATA_sample
-  if (length(Loc_1)>1) {
+  if (length(Loc_1)>0) {
     ID_1<-ID[DATA_sample$Loc%in%Loc_1==TRUE]
-    DATA_sample2<-DATA_sample[-ID_1,]}
+    DATA_sample2<-DATA_sample[-ID_1,]
+    }
     #Sample one data per location
     new_data <- DATA_sample2 %>% group_by(Loc) %>% sample_n(1)
-    ID<-new_data$ID} else {
+    ID<-new_data$ID
+} else {
   #Split using different locations
-  Loc<-paste(df[[i]]$Longitude,df[[i]]$Latitude, sep="_")
   UnLoc<-unique(Loc)
   ID_loc<-sample(x=UnLoc, size=round(0.25*length(UnLoc)))
   ID<-(1:nrow(df[[i]]))[Loc%in%ID_loc==TRUE]
@@ -277,12 +266,16 @@ Testing_2[[i]]<-df_lm[[i]][ID,]
 summary(Training_2[[1]]$Adaptation)
 summary(Testing_2[[1]]$Adaptation)
 
+if(do_maps){
 #Map of data
 pdf(file=paste0(crop_species[[i]],"_samelocs",same_locations,"_testing_training.pdf"), height=4, width=5)
 print(map_testing_training(df[[i]],crop_species[i]))
 dev.off()
 print(map_testing_training(df[[i]],crop_species[i]))
 }
+}
+
+Testing_2[[1]]$Loca %in% Training_2[[1]]$Loca
 ```
 
 #Describe data
@@ -576,21 +569,12 @@ R2_gbm_1[[i]] <- 1 - sum( (Testing_1[[i]]$Effect-Pred_gbm_1[[i]])^2 ) / sum( (Te
 mod_lm <- NULL
 RMSEP_lm <- NULL
 R2_lm <- NULL
-#R2_lm_OPT <- NULL
 for(i in 1:length(crop_species)){
 #Linear model climate
 if(same_locations){
-  if(drop_future){
     mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Adaptation+CO2.ppm+(1|Loca), data=Training_2[[i]])
-  } else {
-    mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Adaptation+CO2.ppm+Future+(1|Loca), data=Training_2[[i]])
-  }
 } else {
-  if(drop_future){
     mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Adaptation+CO2.ppm+(1|Ref), data=Training_2[[i]])
-  } else {
-    mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Adaptation+CO2.ppm+Future+(1|Ref), data=Training_2[[i]])
-  }
 }
 print(crop_species[[i]])
 print(summary(mod_lm[[i]]))
@@ -617,17 +601,9 @@ R2_lm_ints <- NULL
 for(i in 1:length(crop_species)){
 #Linear model climate
 if(same_locations){
-  if(drop_future){ 
     mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*CO2.ppm*Adaptation*TempAvg+(1|Loca), data=Training_2[[i]])
-  } else {
-    mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*CO2.ppm + Delta_temp*Adaptation + Future*TempAvg + Delta_temp*TempAvg+Adaptation+CO2.ppm+Future+(1|Loca), data=Training_2[[i]])
-  }
 } else {
-  if(drop_future){
     mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*CO2.ppm + Delta_temp*Adaptation + Delta_temp*TempAvg+Adaptation+CO2.ppm+(1|Ref), data=Training_2[[i]])
-  } else {
-    mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*CO2.ppm + Delta_temp*Adaptation + Future*TempAvg + Delta_temp*TempAvg+Adaptation+CO2.ppm+Future+(1|Ref), data=Training_2[[i]])
-  }
 }
 print(crop_species[[i]])
 print(summary(mod_lm_ints[[i]]))
@@ -670,11 +646,7 @@ RMSEP_spa_lm <- NULL
 R2_spa_lm <- NULL
 for(i in 1:length(crop_species)){
 #Spatial linear model + climate + CO2
-if(drop_future){
   mod_spa_lm[[i]]<-fitme(Effect~Delta_temp*TempAvg+Adaptation+CO2.ppm+Matern(1|x+y), data=Training_2[[i]])
-} else {
-  mod_spa_lm[[i]]<-fitme(Effect~Delta_temp*TempAvg+Adaptation+CO2.ppm+Future+Matern(1|x+y), data=Training_2[[i]])
-}
 print(crop_species[[i]])
 print(summary(mod_spa_lm[[i]]))
 
@@ -707,65 +679,63 @@ R2_spa_rf[[i]] <- 1 - sum( (Testing_2[[i]]$Effect-Pred_spa_rf)^2 ) / sum( (Testi
 
 ##Summarize RMSE
 ```{r}
-# NAME<-c("RF long lat","GBM long lat",
-#         "RF climate","GBM climate",
-#         "RF climate + long lat","GBM climate + long lat",
-#         "Linear model climate",
-#         "Linear model climate + interactions",
-#         "Spatial linear model","Spatial linear model + climate","Spatial linear model + RF outputs")
-
 NAME<-c("RF long lat","GBM long lat",
         "RF climate","GBM climate",
-        "RF climate + long lat","GBM climate + long lat")
+        "RF climate + long lat","GBM climate + long lat",
+        "Linear model climate",
+        "Linear model climate + interactions",
+        "Spatial linear model","Spatial linear model + climate","Spatial linear model + RF outputs")
 
 RESULT <- NULL
-for(i in 1:4){
-RMSEP <- c(RMSEP_rf_xy[[i]],RMSEP_gbm_xy[[i]],
-RMSEP_rf_0[[i]],RMSEP_gbm_0[[i]],
-RMSEP_rf_1[[i]],RMSEP_gbm_1[[i]])
 
-R2 <- c(R2_rf_xy[[i]],R2_gbm_xy[[i]],
-R2_rf_0[[i]],R2_gbm_0[[i]],
-R2_rf_1[[i]],R2_gbm_1[[i]])
-
-crop_species_col <- rep(crop_species[[i]], length(R2))
-
-RESULT[[i]]<-data.frame(NAME,RMSEP,R2, crop_species_col)
-print(crop_species[[i]])
-print(RESULT[[i]])
-#write.csv(file=paste0(crop_species[[i]],"_samelocs",same_locations,"_dropfuture",drop_future,"_adaptationtypes",adaptation_types,"_stats.csv"),RESULT[[i]])
-}
-
+# NAME<-c("RF long lat","GBM long lat",
+#         "RF climate","GBM climate",
+#         "RF climate + long lat","GBM climate + long lat")
 # for(i in 1:4){
 # RMSEP <- c(RMSEP_rf_xy[[i]],RMSEP_gbm_xy[[i]],
 # RMSEP_rf_0[[i]],RMSEP_gbm_0[[i]],
-# RMSEP_rf_1[[i]],RMSEP_gbm_1[[i]],
-# RMSEP_lm[[i]],
-# RMSEP_lm_ints[[i]],
-# RMSEP_spa_0[[i]],
-# RMSEP_spa_lm[[i]],
-# RMSEP_spa_rf[[i]])
+# RMSEP_rf_1[[i]],RMSEP_gbm_1[[i]])
 # 
 # R2 <- c(R2_rf_xy[[i]],R2_gbm_xy[[i]],
 # R2_rf_0[[i]],R2_gbm_0[[i]],
-# R2_rf_1[[i]],R2_gbm_1[[i]],
-# R2_lm[[i]],
-# R2_lm_ints[[i]],
-# R2_spa_0[[i]],
-# R2_spa_lm[[i]],
-# R2_spa_rf[[i]])
+# R2_rf_1[[i]],R2_gbm_1[[i]])
 # 
 # crop_species_col <- rep(crop_species[[i]], length(R2))
 # 
 # RESULT[[i]]<-data.frame(NAME,RMSEP,R2, crop_species_col)
 # print(crop_species[[i]])
 # print(RESULT[[i]])
-# #write.csv(file=paste0(crop_species[[i]],"_samelocs",same_locations,"_dropfuture",drop_future,"_adaptationtypes",adaptation_types,"_stats.csv"),RESULT[[i]])
 # }
 
+for(i in 1:4){
+RMSEP <- c(RMSEP_rf_xy[[i]],RMSEP_gbm_xy[[i]],
+RMSEP_rf_0[[i]],RMSEP_gbm_0[[i]],
+RMSEP_rf_1[[i]],RMSEP_gbm_1[[i]],
+RMSEP_lm[[i]],
+RMSEP_lm_ints[[i]],
+RMSEP_spa_0[[i]],
+RMSEP_spa_lm[[i]],
+RMSEP_spa_rf[[i]])
+
+R2 <- c(R2_rf_xy[[i]],R2_gbm_xy[[i]],
+R2_rf_0[[i]],R2_gbm_0[[i]],
+R2_rf_1[[i]],R2_gbm_1[[i]],
+R2_lm[[i]],
+R2_lm_ints[[i]],
+R2_spa_0[[i]],
+R2_spa_lm[[i]],
+R2_spa_rf[[i]])
+
+crop_species_col <- rep(crop_species[[i]], length(R2))
+
+RESULT[[i]]<-data.frame(NAME,RMSEP,R2, crop_species_col)
+print(crop_species[[i]])
+print(RESULT[[i]])
+}
+
 RESULT_ALL <- rbind(RESULT[[1]], RESULT[[2]],RESULT[[3]], RESULT[[4]])
-write.csv(file=paste0("samelocs",same_locations,"_dropfuture",drop_future,"_adaptationtypes",adaptation_types,"_stats.csv"),RESULT_ALL)
-save.image(file=paste0("saved_MLs_samelocs",same_locations,"_dropfuture",drop_future,"_adaptationtypes",adaptation_types,".RData"))
+write.csv(file=paste0("samelocs",same_locations,"_adaptationtypes",adaptation_types,"_stats.csv"),RESULT_ALL)
+save.image(file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,".RData"))
 ```
 #STOPPED HERE with all crops streamline
 #Generate maps IDEALIZED
@@ -1082,15 +1052,9 @@ plot(shap_mean)
 NewData$Effect <- predict(explain_rf, NewData)
 
 ##RCP 4.5, No Adaptation
-if(drop_future){
   NewRCPmin <- NewData[which.min(NewData$Effect),-c(7,8)]
   NewRCPmax <- NewData[which.max(NewData$Effect),-c(7,8)]
   NewRCPmean <- NewData[which.quantile (NewData$Effect, 0.5),-c(7,8)]
-} else {
-  NewRCPmin <- NewData[which.min(NewData$Effect),-c(8)]
-  NewRCPmax <- NewData[which.max(NewData$Effect),-c(8)]
-  NewRCPmean <- NewData[which.quantile (NewData$Effect, 0.5),-c(8)]
-}
 
 shap_min <- predict_parts(explainer = explain_rf, 
                       new_observation = NewRCPmin, 
@@ -1190,9 +1154,7 @@ NewData$Effect <- Pred
 #Do the Shap part
 set.seed(1234)
 
-if(drop_future){
   NewData <- NewData[,-c(7)]
-}
 
 explain_rf <- DALEX::explain(model = mod.rf.1.map,  
                         data = Training_map,
