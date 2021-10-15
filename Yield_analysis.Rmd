@@ -56,7 +56,7 @@ same_locations = F
 crop_species = c("Maize","Rice","Wheat","Soybean")
 do_iml = F
 adaptation_types = F
-do_maps = F
+do_maps = T
 
 #FTTF gets hung up somewhere
 ```
@@ -119,13 +119,15 @@ panel.background = element_blank(), axis.line = element_line(colour = "black"), 
  scale_y_continuous("", breaks = ybreaks, labels = ylabels)
 
 map_of_df <- function(DATA,crop_species){
-gg1 + geom_point(data=DATA, aes(x=Longitude, y=Latitude, color=Effect), pch=16, size=1) + scale_color_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,100)) + ggtitle(crop_species)
+gg1 + geom_point(data=DATA, aes(x=Longitude, y=Latitude, color=Effect), pch=16, size=1) + scale_color_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,100)) + ggtitle(crop_species) +
+labs(color="Yield Change (%)")
 #gg1 + geom_point(data=DATA, aes(x=Longitude, y=Latitude, fill=Effect), color="black", pch=21, size=1) + scale_fill_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,100)) + ggtitle(crop_species)
 }
 
 hist_of_df <- function(DATA,crop_species){
 ggplot(data=DATA, aes(x=Effect)) + 
- geom_histogram() + theme_classic() + ggtitle(crop_species) + scale_fill_continuous() + xlim(-100,100) + geom_vline(aes(xintercept = mean(Effect)),col='red', lty=2) + geom_vline(aes(xintercept = median(Effect)),col='blue', lty=2)
+ geom_histogram() + theme_classic() + ggtitle(crop_species) + scale_fill_continuous() + xlim(-100,150) +
+geom_vline(aes(xintercept = mean(Effect)),col='red', lty=2) + geom_vline(aes(xintercept = median(Effect)),col='blue', lty=2) + xlab("Yield Change (%)")
 }
 
 map_testing_training <- function(DATA,crop_species){
@@ -450,7 +452,12 @@ predictor.rf.0 <- Predictor$new(mod.rf.0[[i]], data = Training_0[[i]][-1], y = T
 
 Pred_rf_0[[i]] <- do_iml_rf(predictor.rf.0, mod.rf.0[[i]], Training_0[[i]], Testing_1[[i]], PlotTitle="Climate RF")
 RMSEP_rf_0[[i]]=sqrt(mean((Testing_1[[i]]$Effect-Pred_rf_0[[i]])^2))
-print(plot(Testing_1[[i]]$Effect,Pred_rf_0[[i]]))
+
+pdf(file=paste0(crop_species[[i]],"_samelocs",same_locations,"_adaptypes",adaptation_types,"_ClimateRF.pdf"), height=4, width=4)
+plot(Testing_1[[i]]$Effect,Pred_rf_0[[i]], ylab="Predicted Yield Change (%)", xlab = "Observed Yield Change (%)")
+title(paste0(crop_species[[i]], ": Model 3"), line = 0.5)
+dev.off()
+
 R2_rf_0_int[[i]] <- mod.rf.0[[i]]$r.squared
 R2_rf_0[[i]] <- 1 - sum( (Testing_1[[i]]$Effect-Pred_rf_0[[i]])^2 ) / sum( (Testing_1[[i]]$Effect - mean(Testing_1[[i]]$Effect))^2 )
 
@@ -592,6 +599,12 @@ predictor.rf.1 <- Predictor$new(mod.rf.1[[i]], data = Training_1[[i]][-1], y = T
 Pred_rf_1[[i]] <- do_iml_rf(predictor.rf.1, mod.rf.1[[i]], Training_1[[i]], Testing_1[[i]], PlotTitle="Climate+LongLat RF")
 RMSEP_rf_1[[i]]=sqrt(mean((Testing_1[[i]]$Effect-Pred_rf_1[[i]])^2))
 print(plot(Testing_1[[i]]$Effect,Pred_rf_1[[i]]))
+
+pdf(file=paste0(crop_species[[i]],"_samelocs",same_locations,"_adaptypes",adaptation_types,"_ClimateLongLatRF.pdf"), height=4, width=4)
+plot(Testing_1[[i]]$Effect,Pred_rf_1[[i]], ylab="Predicted Yield Change (%)", xlab = "Observed Yield Change (%)")
+title(paste0(crop_species[[i]], ": Model 5"), line = 0.5)
+dev.off()
+
 R2_rf_1_int[[i]] <- mod.rf.1[[i]]$r.squared
 R2_rf_1[[i]] <- 1 - sum( (Testing_1[[i]]$Effect-Pred_rf_1[[i]])^2 ) / sum( (Testing_1[[i]]$Effect - mean(Testing_1[[i]]$Effect))^2 )
 
@@ -615,6 +628,12 @@ predictor.gbm.1 <- Predictor$new(mod.gbm.1[[i]], data = Training_1[[i]][-1], y =
 Pred_gbm_1[[i]] <- do_iml_gbm(predictor.gbm.1, mod.gbm.1[[i]], Training_1[[i]], Testing_1[[i]], PlotTitle="Climate+LongLat GBM")
 RMSEP_gbm_1[[i]]=sqrt(mean((Testing_1[[i]]$Effect-Pred_gbm_1[[i]])^2))
 print(plot(Testing_1[[i]]$Effect,Pred_gbm_1[[i]]))
+
+pdf(file=paste0(crop_species[[i]],"_samelocs",same_locations,"_adaptypes",adaptation_types,"_ClimateLongLatGBM.pdf"), height=4, width=4)
+plot(Testing_1[[i]]$Effect,Pred_gbm_1[[i]], ylab="Predicted Yield Change (%)", xlab = "Observed Yield Change (%)")
+title(paste0(crop_species[[i]], ": Model 6"), line = 0.5)
+dev.off()
+
 R2_gbm_1_int[[i]] <- mod.gbm.1[[i]][4]$results$Rsquared[which.min(mod.gbm.1[[i]][4]$results$RMSE)]
 R2_gbm_1[[i]] <- 1 - sum( (Testing_1[[i]]$Effect-Pred_gbm_1[[i]])^2 ) / sum( (Testing_1[[i]]$Effect - mean(Testing_1[[i]]$Effect))^2 ) 
 }
@@ -861,6 +880,14 @@ write.csv(file=paste0("samelocs",same_locations,"_adaptationtypes",adaptation_ty
 save.image(file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,".RData"))
 ```
 #STOPPED HERE with all crops streamline
+#Load all the RF models
+```{r}
+load(file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_modrf.RData"))
+
+#[[Nb]][[crop]]
+save.mod.rf[[10]][[1]]
+```
+
 #Generate maps IDEALIZED
 ```{r}
 #############################
@@ -1507,3 +1534,166 @@ dev.off()
 #Temp -1, CO2ppm 0, Adaptation 1
 
 ```
+
+#Make Plots
+##Make obs v pred pred plots
+```{r}
+load("saved_MLs_samelocsFALSE_adaptationtypesFALSE_store_predictions.Rdata")
+AllOP <- bind_rows(ObsPred, .id = "column_label")
+FormOP <- AllOP %>%
+  tidyr::pivot_longer(cols=c(Predicted, Observed), names_to="Type") %>%
+  group_by(Crop, Site, Type) %>%
+  dplyr::summarise(mean = mean(value),
+            se = sd(value)/sqrt(n()),
+            n = n()) %>%
+  tidyr::pivot_wider(names_from = Type, names_sep = ".", values_from = c(mean, se, n))
+
+#mean and se of Observed is redundant, since those don't change over iterations
+pdf(file=paste0("FigureS3_samelocs",same_locations,"_adaptypes",adaptation_types,".pdf"), height=4, width=6)
+  ggplot(FormOP, aes(x=mean.Observed, y=mean.Predicted)) +
+    geom_point() +
+    geom_errorbar(aes(ymin=mean.Predicted-se.Predicted, ymax=mean.Predicted+se.Predicted), width=.2,
+                 position=position_dodge(0.05)) +
+    ylab("Predicted Yield Change (%)") +
+    xlab("Observed Yield Change (%)") +
+    facet_wrap(~Crop) + theme_bw()
+dev.off()
+```
+
+##Make PDP plots
+###Load the data
+```{r}
+adaptation_types = TRUE
+#PDPeffs[[Nb 1-10]][[Crop 1-4]]
+load(paste0("saved_MLs_samelocsFALSE_adaptationtypes",adaptation_types,"_store_PDPs.Rdata"))
+```
+
+###Make the plots
+```{r}
+cbPalette <- c("#000000","#E69F00", "#009E73", "#0072B2", "#CC79A7", "#D55E00", "#56B4E9", "#F0E442")
+
+bindeffs <- function(PDPeffs, Crop.Num) {
+  effs <- NULL
+for(i in 1:10){
+effs[[i]] <- do.call("rbind", PDPeffs[[i]][[Crop.Num]]$results)
+effs[[i]]$.crop <- rep(crop_species[Crop.Num], dim(effs[[i]])[1])
+}
+neweffs <- do.call("rbind", effs)
+return(neweffs)
+}
+
+maize.effs <- bindeffs(PDPeffs, 1)
+rice.effs <- bindeffs(PDPeffs, 2)
+wheat.effs <- bindeffs(PDPeffs, 3)
+soybean.effs <- bindeffs(PDPeffs, 4)
+
+     efdf <- maize.effs %>% 
+       dplyr::full_join(rice.effs) %>%
+       dplyr::full_join(wheat.effs) %>%
+       dplyr::full_join(soybean.effs) %>%
+        group_by(.borders, .feature, .crop) %>%
+  #dplyr::summarise(mean.value = mean(.value), se = sd(.value)/sqrt(n()), n = n())
+     rename(mean.value = .value)
+     
+      efdf.mean <- maize.effs %>% 
+       dplyr::full_join(rice.effs) %>%
+       dplyr::full_join(wheat.effs) %>%
+       dplyr::full_join(soybean.effs) %>%
+        group_by(.borders, .feature, .crop) %>%
+  dplyr::summarise(mean.value = mean(.value), se = sd(.value)/sqrt(n()), n = n())
+     
+     efdf$.crop <- as.factor(efdf$.crop)
+     efdf.mean$.crop <- as.factor(efdf.mean$.crop)
+     
+if(adaptation_types){
+    efdf.adaptation <- filter(efdf.mean, .feature != "TempAvg" && .feature != "CO2.ppm" && .feature != "Delta_temp" && .feature != "Latitude" && .feature != "Longitude")
+    efdf.others <- filter(efdf, .feature == "TempAvg" | .feature == "CO2.ppm" | .feature == "Delta_temp" | .feature == "Latitude" | .feature == "Longitude")
+    efdf.adaptation$.feature <- as.factor(efdf.adaptation$.feature)
+    levels(efdf.adaptation$.feature) <- c("Cultivar", "Fertilizer", "Irrigation", "Others", "Planting Time")
+}else{
+    efdf.adaptation <- efdf.mean[efdf.mean$.feature=="Adaptation",]
+    efdf.others <- efdf[efdf$.feature!="Adaptation",]
+}
+     
+     efdf.others$.borders <- as.numeric(efdf.others$.borders)
+     efdf.TempAvg <- efdf.others[efdf.others$.feature=="TempAvg",]
+     efdf.Delta_temp <- efdf.others[efdf.others$.feature=="Delta_temp",]
+     efdf.CO2.ppm <- efdf.others[efdf.others$.feature=="CO2.ppm",]
+     efdf.Latitude <- efdf.others[efdf.others$.feature=="Latitude",]
+     efdf.Longitude <- efdf.others[efdf.others$.feature=="Longitude",]
+    
+      ylabs = "Yield Change (%)"
+      ylims = range(efdf$mean.value)+range(efdf$mean.value)*0.1
+      
+      ggplot_pdps <- function(efdf, xlabels) {
+      ggplot(efdf, aes(.borders, mean.value, color= .crop)) +
+        geom_point(alpha=0.3) + geom_smooth(se=TRUE, method="loess", span=0.75) + #geom_line() +
+          #geom_errorbar(aes(ymin=mean.value-se, ymax=mean.value+se), width=0, position=position_dodge(.9)) +
+        ylim(ylims) +
+        ylab(ylabs) +
+        xlab(xlabels) + 
+        theme_bw() + theme(legend.position = "none") +
+        scale_color_manual(values = c(cbPalette[1], cbPalette[2], cbPalette[3], cbPalette[4]), labels = c("Maize", "Rice", "Soybean", "Wheat")) + 
+        guides(colour = guide_legend(override.aes = list(size=5)))
+      }
+      
+      ggplot_pdps_latlong <- function(efdf, xlabels) {
+      ggplot(efdf, aes(.borders, mean.value, color= .crop)) +
+        geom_point(alpha=0.3) + geom_smooth(se=TRUE, method="loess", span=0.75) + #geom_line() +
+          #geom_errorbar(aes(ymin=mean.value-se, ymax=mean.value+se), width=0, position=position_dodge(.9)) +
+        ylim(ylims) +
+        ylab(ylabs) +
+        xlab(xlabels) + 
+        theme_bw() + theme(legend.position = "none") +
+        scale_color_manual(values = c(cbPalette[2], cbPalette[4])) + 
+        guides(colour = guide_legend(override.aes = list(size=5)))
+      }
+      
+p1 <- ggplot_pdps(efdf.TempAvg, expression("Average Temperature"~degree~"C"))
+p2 <- ggplot_pdps(efdf.Delta_temp, expression(Delta~" Temperature"~degree~"C"))
+p3 <- ggplot_pdps(efdf.CO2.ppm, expression(Delta~"CO"[2]~"ppm above 390 ppm"))
+p4 <- ggplot_pdps_latlong(efdf.Latitude, "Latitude")
+p5 <- ggplot_pdps_latlong(efdf.Longitude, "Longitude")
+
+if(adaptation_types){
+  p6 <- ggplot(efdf.adaptation, aes(x = .borders, y = mean.value, fill=.crop)) +
+          geom_bar(stat = "identity") +
+                #geom_errorbar(aes(ymin=mean.value-se, ymax=mean.value+se), width=.2, position=position_dodge(.9)) +
+          facet_grid(.~.feature) +
+          ylim(ylims) +
+          ylab(ylabs) +
+          xlab("") + 
+          theme_bw() + theme(legend.position = "none", strip.text.x = element_text(size = 5)) +
+          scale_fill_manual(values = c(cbPalette[1], cbPalette[2], cbPalette[3], cbPalette[4])) + 
+          guides(colour = guide_legend(override.aes = list(size=5)))
+}else{
+  p6 <- ggplot(efdf.adaptation, aes(x = .borders, y = mean.value, fill=.crop)) +
+          geom_bar(stat = "identity") + 
+                #geom_errorbar(aes(ymin=mean.value-se, ymax=mean.value+se), width=.2, position=position_dodge(.9)) +
+          ylim(ylims) +
+          ylab(ylabs) +
+          xlab("") + 
+          theme_bw() + theme(legend.position = "none") +
+          scale_fill_manual(values = c(cbPalette[1], cbPalette[2], cbPalette[3], cbPalette[4])) + 
+          guides(colour = guide_legend(override.aes = list(size=5)))
+}
+  p7 <- ggplot(efdf.adaptation, aes(x = .borders, y = mean.value, fill=.crop)) +
+          geom_bar(stat = "identity") + 
+                #geom_errorbar(aes(ymin=mean.value-se, ymax=mean.value+se), width=.2, position=position_dodge(.9)) +
+          ylim(ylims) +
+          ylab(ylabs) +
+          xlab("") + 
+          theme_bw() +
+          labs(fill="Crop") +
+          scale_fill_manual(values = c(cbPalette[1], cbPalette[2], cbPalette[3], cbPalette[4]), name="Crop") +
+          guides(colour = guide_legend(override.aes = list(size=5)))
+
+pdf(file=paste0("adaptation",adaptation_types,"_PDPs.pdf"), height=6, width=6.5)
+    multiplot(p1,p2,p3,p4,p5,p6, cols=2)
+dev.off()
+
+pdf(file=paste0("adaptation",adaptation_types,"_PDPs_legend.pdf"), height=5, width=5)
+    p7
+dev.off()
+```
+

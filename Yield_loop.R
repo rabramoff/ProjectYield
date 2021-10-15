@@ -1,10 +1,32 @@
 ######Yield loop#####
+######Load libraries#####
+library(openxlsx)
+library(raster)
+library(rgdal)
+library(rgeos)
+library(maps)
+library(mapdata)
+library(dplyr)
+library(lme4)
+library(lmerTest)
+library(spaMM)
+library(ranger)
+library(ggplot2)
+library(pdp)
+library(caret)
+library(iml)
+library(randomForest)
+library(gbm)
+library(DALEX)
+require(MuMIn)
+
 #####Switches#####
-same_locations = T
+same_locations = F
 crop_species = c("Maize","Rice","Wheat","Soybean")
 adaptation_types = F
 do_iml = F
 Nb<-10
+run_all_mods = F
 
 start <- Sys.time()
 
@@ -140,6 +162,10 @@ R2_spa_0_vec<-matrix(nrow=Nb,ncol=4)
 R2_spa_lm_vec<-matrix(nrow=Nb,ncol=4)
 R2_spa_rf_vec<-matrix(nrow=Nb,ncol=4)
 
+ObsPred <- NULL
+PDPeffs <- NULL
+save.mod.rf <- NULL
+
 for (j in 1:Nb) {
   print(j)
   
@@ -153,7 +179,7 @@ if(adaptation_types){
   } else {
     DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,TempAvg, y=Latitude, x=Longitude, Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others)
   }
-  DATA<-data.frame(Effect,Species,Delta_temp,CO2.ppm,TempAvg, Future, Latitude, Longitude,Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others)
+  DATA<-data.frame(Effect,Species,Delta_temp,CO2.ppm,TempAvg, Latitude, Longitude,Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others)
 }else{
   if(same_locations){
     Loca<-paste(Longitude,Latitude, sep="_") 
@@ -174,6 +200,8 @@ Testing_1 <- NULL
 Training_2 <- NULL
 Testing_2 <- NULL
 Locs <- NULL
+bestPred <- NULL
+bestEffs <- NULL
 
 for (i in 1:length(crop_species)){
   df[[i]]<-DATA[DATA$Species==crop_species[i],]
@@ -239,6 +267,8 @@ for (i in 1:length(crop_species)){
 }
 
 #####Training and Testing#####
+
+if(run_all_mods){
 #####Spatial RF#####
 mod.rf.xy <- NULL
 RMSEP_rf_xy <- NULL
@@ -280,6 +310,7 @@ for(i in 1:length(crop_species)){
   R2_gbm_xy[[i]] <- 1 - sum( (Testing_xy[[i]]$Effect-Pred_gbm_xy[[i]])^2 ) / sum( (Testing_xy[[i]]$Effect - mean(Testing_xy[[i]]$Effect))^2 )
   
 }
+}
 
 #####Climate RF#####
 mod.rf.0 <- NULL
@@ -292,16 +323,11 @@ Training_2_bis <- NULL
 Pred_rf_0 <- NULL
 for(i in 1:length(crop_species)){
   Training_0[[i]] <- Training_1[[i]][,-which(names(Training_1[[i]]) %in% c("Latitude","Longitude"))]
-  
   mod.rf.0[[i]] <- ranger(Effect~., data=Training_0[[i]], num.trees=1000)
-  #print(crop_species[[i]])
-  #print(mod.rf.0[[i]])
-  
   predictor.rf.0 <- Predictor$new(mod.rf.0[[i]], data = Training_0[[i]][-1], y = Training_0[[i]]$Effect, predict.fun = pfun)
   
   Pred_rf_0[[i]] <- do_iml_rf(predictor.rf.0, mod.rf.0[[i]], Training_0[[i]], Testing_1[[i]], PlotTitle="Climate RF")
   RMSEP_rf_0[[i]]=sqrt(mean((Testing_1[[i]]$Effect-Pred_rf_0[[i]])^2))
-  #print(plot(Testing_1[[i]]$Effect,Pred_rf_0[[i]]))
   R2_rf_0_int[[i]] <- mod.rf.0[[i]]$r.squared
   R2_rf_0[[i]] <- 1 - sum( (Testing_1[[i]]$Effect-Pred_rf_0[[i]])^2 ) / sum( (Testing_1[[i]]$Effect - mean(Testing_1[[i]]$Effect))^2 )
   
@@ -316,65 +342,22 @@ for(i in 1:length(crop_species)){
 
     #feature effects
     effs <- FeatureEffects$new(predictor.rf.0, method="pdp")
-    ales <- FeatureEffects$new(predictor.rf.0, method="ale")
-    
-    #WORKING nice plot, min maxs, combine?
-    make_effect_plots <- function(effs, effs_title) {
-      efdf <- as.data.frame(rbind(effs$results$TempAvg, effs$results$Delta_temp, effs$results$CO2.ppm, effs$results$Adaptation))
-      names(efdf) <- c("VarValue","YieldChange","Method","Feature")
-      efdf$VarValue <- as.numeric(efdf$VarValue)
-      #ggplot(data=efdf, aes(x=VarValue, y=YieldChange)) + geom_line() + facet_wrap(.~Feature, nrow=2, scales = "free_x")
-      ylabs = "Yield Change"
-      ylims = range(efdf$YieldChange)+range(efdf$YieldChange)*0.1
-      if(adaptation_types){
-        layout.matrix <- matrix(c(1,3,9,2,6,10,5,7,11,4,8,12), nrow = 3, ncol = 4)
-        pdf(file=paste0(crop_species[[i]],"_samelocs",same_locations,"_",effs_title,".pdf"), height=6, width=8)
-      }else{
-        layout.matrix <- matrix(c(1, 2, 3, 4), nrow = 1, ncol = 4)
-        pdf(file=paste0(crop_species[[i]],"_samelocs",same_locations,"_",effs_title,".pdf"), height=2, width=8)
-      }
-      layout(mat = layout.matrix,
-             heights = c(1,1,1,1), # Heights of the two rows
-             widths = c(2.65,2,2,2)) # Widths of the two columns
-      #layout.show(4) 
-      par(oma=c(0,0,0,0)) # all sides have 3 lines of space
-      par(mar=c(6,5,0,0) + 0.1)
-      plot(effs$results$TempAvg$.borders, effs$results$TempAvg$.value, type = "l", ylab=ylabs, xlab=expression("Average Temperature"~degree~"C"), ylim=ylims)
-      par(mar=c(6,1,0,0) + 0.1)
-      plot(effs$results$Delta_temp$.borders, effs$results$Delta_temp$.value, type = "l", ylab="", xlab=expression(Delta~" Temperature"~degree~"C"), ylim=ylims, yaxt='n')
-      if(adaptation_types){
-        par(mar=c(6,5,0,0) + 0.1)
-        plot(effs$results$CO2.ppm$.borders, effs$results$CO2.ppm$.value, type = "l", ylab=ylabs, xlab=expression(Delta~"CO"[2]~"ppm above 390 ppm"), ylim=ylims)
-        par(mar=c(6,1,0,0) + 0.1)
-        plot(effs$results$Fertiliser$.borders, effs$results$Fertiliser$.value, type = "l", ylab="", xlab="Fertilizer", ylim=ylims, yaxt='n', las=2)
-        par(mar=c(6,1,0,0) + 0.1)
-        if(i!=4){
-          plot(effs$results$Irrigation$.borders, effs$results$Irrigation$.value, type = "l", ylab="", xlab="Irrigation", ylim=ylims, yaxt='n', las=2)
-        }
-        par(mar=c(6,1,0,0) + 0.1)
-        plot(effs$results$Cultivar$.borders, effs$results$Cultivar$.value, type = "l", ylab="", xlab="Cultivar", ylim=ylims, yaxt='n', las=2)
-        par(mar=c(6,1,0,0) + 0.1)
-        plot(effs$results$Planting_time$.borders, effs$results$Planting_time$.value, type = "l", ylab="", xlab="Planting Time", ylim=ylims, yaxt='n', las=2)
-        if(i==2|i==3){
-          par(mar=c(6,1,0,0) + 0.1)
-          plot(effs$results$Others$.borders, effs$results$Others$.value, type = "l", ylab="", xlab="Others", ylim=ylims, yaxt='n', las=2)
-        }
-      }else{
-        par(mar=c(6,1,0,0) + 0.1)
-        plot(effs$results$CO2.ppm$.borders, effs$results$CO2.ppm$.value, type = "l", ylab="", xlab=expression(Delta~"CO"[2]~"ppm above 390 ppm"), ylim=ylims, yaxt='n')
-        par(mar=c(6,1,0,0) + 0.1)
-        plot(effs$results$Adaptation$.borders, effs$results$Adaptation$.value, type = "l", ylab="", xlab="Adaptation", ylim=ylims, yaxt='n', las=2)
-      }
-      dev.off()
-    }
-    
-    make_effect_plots(effs,"PDPs")
-    make_effect_plots(ales,"ALEs")
+    #ales <- FeatureEffects$new(predictor.rf.0, method="ale")
+    # make_effect_plots(effs,"PDPs")
+    # make_effect_plots(ales,"ALEs")
   
+  if(i==1|i==4){
+    bestPred[[i]] <- as.data.frame(cbind(Pred_rf_0[[i]], Testing_1[[i]]$Effect, rep(crop_species[i], length(Pred_rf_0[[i]])), row.names(Testing_1[[i]])))
+    bestPred[[i]][,1] <- as.numeric(bestPred[[i]][,1])
+    bestPred[[i]][,2] <- as.numeric(bestPred[[i]][,2])
+    names(bestPred[[i]]) <- c("Predicted", "Observed", "Crop", "Site")
+    bestEffs[[i]] <- effs
+  }
   }
   
 }
 
+if(run_all_mods){
 ####Climate GBM#####
 mod.gbm.0 <- NULL
 Pred_gbm_0 <- NULL
@@ -383,16 +366,14 @@ R2_gbm_0_int <- NULL
 R2_gbm_0 <- NULL
 for(i in 1:length(crop_species)){
   mod.gbm.0[[i]] <- do_GBM(Training_0[[i]])
-  #print(crop_species[[i]])
-  #print(mod.gbm.0[[i]])
   
   predictor.gbm.0 <- Predictor$new(mod.gbm.0[[i]], data = Training_0[[i]][-1], y = Training_0[[i]]$Effect)
   
   Pred_gbm_0[[i]] <- do_iml_gbm(predictor.gbm.0, mod.gbm.0[[i]], Training_0[[i]], Testing_1[[i]], PlotTitle="Climate GBM")
   RMSEP_gbm_0[[i]]=sqrt(mean((Testing_1[[i]]$Effect-Pred_gbm_0[[i]])^2))
-  #print(plot(Testing_1[[i]]$Effect,Pred_gbm_0[[i]]))
   R2_gbm_0_int[[i]] <- mod.gbm.0[[i]][4]$results$Rsquared[which.min(mod.gbm.0[[i]][4]$results$RMSE)]
   R2_gbm_0[[i]] <- 1 - sum( (Testing_1[[i]]$Effect-Pred_gbm_0[[i]])^2 ) / sum( (Testing_1[[i]]$Effect - mean(Testing_1[[i]]$Effect))^2 )
+}
 }
 
 ####Climate+longlat RF#####
@@ -408,19 +389,36 @@ for(i in 1:length(crop_species)){
   } else {
     mod.rf.1[[i]] <- ranger(Effect~., data=Training_1[[i]], num.trees=1000)
   }
-  #print(crop_species[[i]])
-  #print(mod.rf.1[[i]])
   
   predictor.rf.1 <- Predictor$new(mod.rf.1[[i]], data = Training_1[[i]][-1], y = Training_1[[i]]$Effect, predict.fun = pfun)
   
   Pred_rf_1[[i]] <- do_iml_rf(predictor.rf.1, mod.rf.1[[i]], Training_1[[i]], Testing_1[[i]], PlotTitle="Climate+LongLat RF")
   RMSEP_rf_1[[i]]=sqrt(mean((Testing_1[[i]]$Effect-Pred_rf_1[[i]])^2))
-  #print(plot(Testing_1[[i]]$Effect,Pred_rf_1[[i]]))
   R2_rf_1_int[[i]] <- mod.rf.1[[i]]$r.squared
   R2_rf_1[[i]] <- 1 - sum( (Testing_1[[i]]$Effect-Pred_rf_1[[i]])^2 ) / sum( (Testing_1[[i]]$Effect - mean(Testing_1[[i]]$Effect))^2 )
   
+  if(do_iml){
+    imp <- FeatureImp$new(predictor.rf.1, loss = "mae")
+    
+    #strength of interactions
+    interact <- Interaction$new(predictor.rf.1)
+    
+    #feature effects
+    effs <- FeatureEffects$new(predictor.rf.1, method="pdp")
+    #ales <- FeatureEffects$new(predictor.rf.0, method="ale")
+  
+  if(i==2|i==3){
+    bestPred[[i]] <- as.data.frame(cbind(Pred_rf_1[[i]], Testing_1[[i]]$Effect, rep(crop_species[i], length(Pred_rf_1[[i]])), row.names(Testing_1[[i]])))
+    bestPred[[i]][,1] <- as.numeric(bestPred[[i]][,1])
+    bestPred[[i]][,2] <- as.numeric(bestPred[[i]][,2])
+    names(bestPred[[i]]) <- c("Predicted", "Observed", "Crop", "Site")
+    bestEffs[[i]] <- effs
+  }
+  }
+  
 }
 
+if(run_all_mods){
 #####Climate+longlat GBM#####
 mod.gbm.1 <- NULL
 RMSEP_gbm_1 <- NULL
@@ -429,14 +427,11 @@ R2_gbm_1_int <- NULL
 R2_gbm_1 <- NULL
 for(i in 1:length(crop_species)){
   mod.gbm.1[[i]] <- do_GBM(Training_1[[i]])
-  #print(crop_species[[i]])
-  #print(mod.gbm.1[[i]])
-  
+
   predictor.gbm.1 <- Predictor$new(mod.gbm.1[[i]], data = Training_1[[i]][-1], y = Training_1[[i]]$Effect)
   
   Pred_gbm_1[[i]] <- do_iml_gbm(predictor.gbm.1, mod.gbm.1[[i]], Training_1[[i]], Testing_1[[i]], PlotTitle="Climate+LongLat GBM")
   RMSEP_gbm_1[[i]]=sqrt(mean((Testing_1[[i]]$Effect-Pred_gbm_1[[i]])^2))
-  #print(plot(Testing_1[[i]]$Effect,Pred_gbm_1[[i]]))
   R2_gbm_1_int[[i]] <- mod.gbm.1[[i]][4]$results$Rsquared[which.min(mod.gbm.1[[i]][4]$results$RMSE)]
   R2_gbm_1[[i]] <- 1 - sum( (Testing_1[[i]]$Effect-Pred_gbm_1[[i]])^2 ) / sum( (Testing_1[[i]]$Effect - mean(Testing_1[[i]]$Effect))^2 ) 
 }
@@ -446,6 +441,7 @@ for(i in 1:length(crop_species)){
 mod_lm <- NULL
 RMSEP_lm <- NULL
 R2_lm <- NULL
+Pred_lm <- NULL
 for(i in 1:length(crop_species)){
   #Linear model climate
   if(adaptation_types){
@@ -488,22 +484,20 @@ for(i in 1:length(crop_species)){
   #print(summary(mod_lm[[i]]))
   
   if(same_locations){
-    Pred_lm<-predict(mod_lm[[i]], newdata=Testing_2[[i]]) #removed random effect on Jul 5, 2021
+    Pred_lm[[i]]<-predict(mod_lm[[i]], newdata=Testing_2[[i]]) #removed random effect on Jul 5, 2021
   } else {
-    Pred_lm<-predict(mod_lm[[i]], newdata=Testing_2[[i]], re.form=NA) #NA means include no random effects
+    Pred_lm[[i]]<-predict(mod_lm[[i]], newdata=Testing_2[[i]], re.form=NA) #NA means include no random effects
   }
   
-  RMSEP_lm[[i]]=sqrt(mean((Testing_2[[i]]$Effect-Pred_lm)^2))
-  #print(plot(Testing_2[[i]]$Effect,Pred_lm))
-  #R2_lm[[i]] <- r.squaredGLMM(mod_lm[[i]])[1]
-  R2_lm[[i]] <- 1 - sum( (Testing_2[[i]]$Effect-Pred_lm)^2 ) / sum( (Testing_2[[i]]$Effect - mean(Testing_2[[i]]$Effect))^2 )
-  #R2_lm_OPT[[i]] <- 1 - sum( (Testing_2[[i]]$Effect-Pred_lm)^2 ) / ( sum(Testing_2[[i]]$Effect^2) - (sum(Testing_2[[i]]$Effect)^2 / length(Testing_2[[i]]$Effect)) ) #same
+  RMSEP_lm[[i]]=sqrt(mean((Testing_2[[i]]$Effect-Pred_lm[[i]])^2))
+  R2_lm[[i]] <- 1 - sum( (Testing_2[[i]]$Effect-Pred_lm[[i]])^2 ) / sum( (Testing_2[[i]]$Effect - mean(Testing_2[[i]]$Effect))^2 )
 }
 
 #####Climate+Interactions#####
 mod_lm_ints <- NULL
 RMSEP_lm_ints <- NULL
 R2_lm_ints <- NULL
+Pred_lm_ints <- NULL
 for(i in 1:length(crop_species)){
   #Linear model climate
   if(adaptation_types){
@@ -542,42 +536,37 @@ for(i in 1:length(crop_species)){
       #mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*CO2.ppm + Delta_temp*Adaptation + Delta_temp*TempAvg+Adaptation+CO2.ppm+(1|Ref), data=Training_2[[i]])
       mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*CO2.ppm*Adaptation*TempAvg+(1|Ref), data=Training_2[[i]])
     }
-    #print(crop_species[[i]])
-    #print(summary(mod_lm_ints[[i]]))
   }
   
   if(same_locations){
-    Pred_lm_ints<-predict(mod_lm_ints[[i]], newdata=Testing_2[[i]], re.form=NA) #removed random effect on Jul 5, 2021
+    Pred_lm_ints[[i]]<-predict(mod_lm_ints[[i]], newdata=Testing_2[[i]], re.form=NA) #removed random effect on Jul 5, 2021
   } else {
-    Pred_lm_ints<-predict(mod_lm_ints[[i]], newdata=Testing_2[[i]], re.form=NA)
+    Pred_lm_ints[[i]]<-predict(mod_lm_ints[[i]], newdata=Testing_2[[i]], re.form=NA)
   }
   
-  RMSEP_lm_ints[[i]]=sqrt(mean((Testing_2[[i]]$Effect-Pred_lm_ints)^2))
-  R2_lm_ints[[i]] <- 1 - sum( (Testing_2[[i]]$Effect-Pred_lm_ints)^2 ) / sum( (Testing_2[[i]]$Effect - mean(Testing_2[[i]]$Effect))^2 )
-  #print(plot(Testing_2[[i]]$Effect,Pred_lm_ints))
-  #R2_lm_ints[[i]] <- r.squaredGLMM(mod_lm_ints[[i]])[2]
+  RMSEP_lm_ints[[i]]=sqrt(mean((Testing_2[[i]]$Effect-Pred_lm_ints[[i]])^2))
+  R2_lm_ints[[i]] <- 1 - sum( (Testing_2[[i]]$Effect-Pred_lm_ints[[i]])^2 ) / sum( (Testing_2[[i]]$Effect - mean(Testing_2[[i]]$Effect))^2 )
 }
 
 #####Spatial#####
 mod_spa_0 <- NULL
 RMSEP_spa_0 <- NULL
 R2_spa_0 <- NULL
+Pred_spa_0 <- NULL
 for(i in 1:length(crop_species)){
   #Spatial linear model
   mod_spa_0[[i]]<-fitme(Effect~1+Matern(1|x+y), data=Training_2[[i]])
-  #print(crop_species[[i]])
-  #print(summary(mod_spa_0[[i]]))
   
-  Pred_spa_0<-predict(mod_spa_0[[i]], newdata=Testing_2[[i]])
-  RMSEP_spa_0[[i]]=sqrt(mean((Testing_2[[i]]$Effect-Pred_spa_0)^2))
-  #print(plot(Testing_2[[i]]$Effect,Pred_spa_0))
-  R2_spa_0[[i]] <- 1 - sum( (Testing_2[[i]]$Effect-Pred_spa_0)^2 ) / sum( (Testing_2[[i]]$Effect - mean(Testing_2[[i]]$Effect))^2 )
+  Pred_spa_0[[i]]<-predict(mod_spa_0[[i]], newdata=Testing_2[[i]])
+  RMSEP_spa_0[[i]]=sqrt(mean((Testing_2[[i]]$Effect-Pred_spa_0[[i]])^2))
+  R2_spa_0[[i]] <- 1 - sum( (Testing_2[[i]]$Effect-Pred_spa_0[[i]])^2 ) / sum( (Testing_2[[i]]$Effect - mean(Testing_2[[i]]$Effect))^2 )
 }
 
 #####Spatial climate#####
 mod_spa_lm <- NULL
 RMSEP_spa_lm <- NULL
 R2_spa_lm <- NULL
+Pred_spa_lm <- NULL
 for(i in 1:length(crop_species)){
   #Spatial linear model + climate + CO2
   
@@ -598,14 +587,9 @@ for(i in 1:length(crop_species)){
     mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Adaptation+CO2.ppm+Matern(1|x+y), data=Training_2[[i]])
   }
   
-  #print(crop_species[[i]])
-  #print(summary(mod_spa_lm[[i]]))
-  
-  
-  Pred_spa_lm<-predict(mod_spa_lm[[i]], newdata=Testing_2[[i]])
-  RMSEP_spa_lm[[i]]=sqrt(mean((Testing_2[[i]]$Effect-Pred_spa_lm)^2))
-  #print(plot(Testing_2[[i]]$Effect,Pred_spa_lm))
-  R2_spa_lm[[i]] <- 1 - sum( (Testing_2[[i]]$Effect-Pred_spa_lm)^2 ) / sum( (Testing_2[[i]]$Effect - mean(Testing_2[[i]]$Effect))^2 )
+  Pred_spa_lm[[i]]<-predict(mod_spa_lm[[i]], newdata=Testing_2[[i]])
+  RMSEP_spa_lm[[i]]=sqrt(mean((Testing_2[[i]]$Effect-Pred_spa_lm[[i]])^2))
+  R2_spa_lm[[i]] <- 1 - sum( (Testing_2[[i]]$Effect-Pred_spa_lm[[i]])^2 ) / sum( (Testing_2[[i]]$Effect - mean(Testing_2[[i]]$Effect))^2 )
 }
 
 #####Spatial+RF outputs#####
@@ -613,26 +597,28 @@ mod_spa_rf <- NULL
 RMSEP_spa_rf <- NULL
 Testing_2_bis <- NULL
 R2_spa_rf <- NULL
+Pred_spa_rf <- NULL
 for(i in 1:length(crop_species)){
   #Sptial linear model + RF outputs
   mod_spa_rf[[i]]<-fitme(Effect~X0+Matern(1|x+y), data=Training_2_bis[[i]])
-  #print(crop_species[[i]])
-  #print(summary(mod_spa_rf[[i]]))
   
   Testing_2_bis[[i]]<-cbind(Testing_2[[i]], X0=Pred_rf_0[[i]])
-  Pred_spa_rf<-predict(mod_spa_rf[[i]], newdata=Testing_2_bis[[i]])
-  RMSEP_spa_rf[[i]]=sqrt(mean((Testing_2_bis[[i]]$Effect-Pred_spa_rf)^2))
-  #print(plot(Testing_2_bis[[i]]$Effect,Pred_spa_rf))
-  R2_spa_rf[[i]] <- 1 - sum( (Testing_2[[i]]$Effect-Pred_spa_rf)^2 ) / sum( (Testing_2[[i]]$Effect - mean(Testing_2[[i]]$Effect))^2 )
+  Pred_spa_rf[[i]]<-predict(mod_spa_rf[[i]], newdata=Testing_2_bis[[i]])
+  RMSEP_spa_rf[[i]]=sqrt(mean((Testing_2_bis[[i]]$Effect-Pred_spa_rf[[i]])^2))
+  R2_spa_rf[[i]] <- 1 - sum( (Testing_2[[i]]$Effect-Pred_spa_rf[[i]])^2 ) / sum( (Testing_2[[i]]$Effect - mean(Testing_2[[i]]$Effect))^2 )
 }
 
+}
 #####End Training and Testing#####
   ##WORKING - issue with putting them all together for adaptation types T, but not with running it
 for(i in 1:length(crop_species)){  
-  
+
+  if(run_all_mods){
   RMSEP_rf_xy_vec[j,i]<-RMSEP_rf_xy[[i]]
+  }
   RMSEP_rf_0_vec[j,i]<-RMSEP_rf_0[[i]]
   RMSEP_rf_1_vec[j,i]<-RMSEP_rf_1[[i]]
+  if(run_all_mods){
   RMSEP_gbm_xy_vec[j,i]<-RMSEP_gbm_xy[[i]]
   RMSEP_gbm_0_vec[j,i]<-RMSEP_gbm_0[[i]]
   RMSEP_gbm_1_vec[j,i]<-RMSEP_gbm_1[[i]]
@@ -641,10 +627,14 @@ for(i in 1:length(crop_species)){
   RMSEP_spa_0_vec[j,i]<-RMSEP_spa_0[[i]]
   RMSEP_spa_lm_vec[j,i]<-RMSEP_spa_lm[[i]]
   RMSEP_spa_rf_vec[j,i]<-RMSEP_spa_rf[[i]]
+  }
 
+  if(run_all_mods){
   R2_rf_xy_vec[j,i]<-R2_rf_xy[[i]]
+  }
   R2_rf_0_vec[j,i]<-R2_rf_0[[i]]
   R2_rf_1_vec[j,i]<-R2_rf_1[[i]]
+  if(run_all_mods){
   R2_gbm_xy_vec[j,i]<-R2_gbm_xy[[i]]
   R2_gbm_0_vec[j,i]<-R2_gbm_0[[i]]
   R2_gbm_1_vec[j,i]<-R2_gbm_1[[i]]
@@ -656,14 +646,28 @@ for(i in 1:length(crop_species)){
   }
 }
 
+ObsPred[[j]] <- rbind(bestPred[[1]], bestPred[[2]], bestPred[[3]], bestPred[[4]])
+if(do_iml){
+PDPeffs[[j]] <- list(bestEffs[[1]], bestEffs[[2]], bestEffs[[3]], bestEffs[[4]])
+}
+save.mod.rf[[j]] <- list(mod.rf.0[[1]], mod.rf.1[[2]], mod.rf.1[[3]], mod.rf.0[[4]]) 
+}
+
 RESULT <- NULL
+if(run_all_mods){
 NAME<-c("RF long lat","GBM long lat",
         "RF climate","GBM climate",
         "RF climate + long lat","GBM climate + long lat",
         "Linear model climate",
         "Linear model climate + interactions",
         "Spatial linear model","Spatial linear model + climate","Spatial linear model + RF outputs")
+}else{
+  NAME<-c("RF climate",
+          "RF climate + long lat") 
+}
 for(i in 1:length(crop_species)){
+
+  if(run_all_mods){
   RMSEP_MEAN <- c(
     mean(RMSEP_rf_xy_vec[,i]),
     mean(RMSEP_gbm_xy_vec[,i]),
@@ -715,6 +719,23 @@ for(i in 1:length(crop_species)){
     sd(R2_spa_0_vec[,i])/sqrt(Nb),
     sd(R2_spa_lm_vec[,i])/sqrt(Nb),
     sd(R2_spa_rf_vec[,i])/sqrt(Nb))
+  }else{
+    RMSEP_MEAN <- c(
+      mean(RMSEP_rf_0_vec[,i]),
+      mean(RMSEP_rf_1_vec[,i]))
+    
+    RMSEP_SE<-c(
+      sd(RMSEP_rf_0_vec[,i])/sqrt(Nb),
+      sd(RMSEP_rf_1_vec[,i])/sqrt(Nb))
+    
+    R2_MEAN <- c(
+      mean(R2_rf_0_vec[,i]),
+      mean(R2_rf_1_vec[,i]))
+    
+    R2_SE<-c(
+      sd(R2_rf_0_vec[,i])/sqrt(Nb),
+      sd(R2_rf_1_vec[,i])/sqrt(Nb))
+  }
   
   crop_species_col <- rep(crop_species[[i]], length(R2_MEAN))
   
@@ -726,6 +747,12 @@ for(i in 1:length(crop_species)){
 RESULT_ALL <- rbind(RESULT[[1]], RESULT[[2]],RESULT[[3]], RESULT[[4]])
 write.csv(file=paste0("samelocs",same_locations,"_adaptationtypes",adaptation_types,"_stats_loop.csv"),RESULT_ALL)
 save.image(file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_loop.RData"))
+save(ObsPred, file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_store_predictions.RData"))
+if(do_iml){
+save(PDPeffs, file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_store_PDPs.RData"))
+#PDPeffs[[Nb 1-10]][[Crop 1-4]]
+}
+save(save.mod.rf, file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_modrf.RData"))
 
 end <- Sys.time()
 end - start
