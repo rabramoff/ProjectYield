@@ -11,6 +11,7 @@ source('multiplot.R')
 same_locations = F
 crop_species = c("Maize","Rice","Wheat","Soybean")
 adaptation_types = F
+rcp45 = T
 
 ######Load models and data#####
 load(file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_modrf.RData"))
@@ -71,28 +72,19 @@ map_of_scenario <- function(Delta_temp_level, CO2.ppm_level, Adaptation_level, m
   test_df$Adaptation_level <- rep(Adaptation_level, dim(test_df)[1])
   
   return(test_df)
-  
-  #WORKING save df and make into one big df and use facets for plotting
-  
-  #pdf(file=paste0(crop_species_map,"_",Delta_temp_level,"_", CO2.ppm_level,"_", Adaptation_level,".pdf"), height=8, width=8)
-  #print(gg1 + geom_tile(data=test_df, aes(x=x, y=y, fill=Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,100)) + ggtitle(crop_species_map))
-  # gg2 <- gg1 + geom_tile(data=test_df, aes(x=x, y=y, fill=Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,100)) #+ ggtitle(crop_species_map)
-  # return(gg2)
-  #dev.off()
-  
-  # pdf(file=paste0(crop_species_map,"_",Delta_temp_level,"_", CO2.ppm_level,"_", Adaptation_level,"_lowfi.pdf"), height=8, width=8)
-  # par(bty="n")
-  # plot(MAT, col=rev(hcl.colors(25)), breaks=seq(-80,40,by=5))
-  # text(0,100, paste0(crop_species_map,""))
-  # maps::map("world", add=T)
-  # dev.off()
 }
 
-#WORKING Next add RCP4.5 switch and ifelse here
 # #Delta_temp_level = 2; CO2.ppm_level=0; Adaptation_level=1
-Delta_temp_levels = rep(c(1.5, 2, 3), 4)
-CO2.ppm_levels = rep(c(rep(0,3), rep(210,3)),2)
-Adaptation_levels = c(rep(1,6), rep(2,6))
+if(rcp45){
+  Delta_temp_levels = c(2,2)
+  CO2.ppm_levels = c(116,116)
+  Adaptation_levels = c(1,2)
+}else{
+  Delta_temp_levels = rep(c(1.5, 2, 3), 4)
+  CO2.ppm_levels = rep(c(rep(0,3), rep(210,3)),2)
+  Adaptation_levels = c(rep(1,6), rep(2,6))
+}
+
 map_df <- NULL
 map_df_all <- NULL
 map_df_all_crop <- NULL
@@ -112,7 +104,7 @@ for(k in 1:4){
   for (j in 1:10){
     mod.rf.map <- save.mod.rf[[j]][[k]]
 
-    for(i in 1:12){
+    for(i in 1:length(Delta_temp_levels)){
       map_df[[i]] <- map_of_scenario(Delta_temp_levels[i], CO2.ppm_levels[i], Adaptation_levels[i], mod.rf.map)
     }
    
@@ -164,10 +156,6 @@ map_summary <- map_combined %>%
                    SE_Effect = sd(Effect)/sqrt(n()),
                    n = n())
 
-map1.5 <- map_summary[map_summary$Delta_temp_level == "1.5",]
-map2 <- map_summary[map_summary$Delta_temp_level == "2",]
-map3 <- map_summary[map_summary$Delta_temp_level == "3",]
-
 # New facet label names for Adaptation variable
 adpt.labs <- c("No Adaptation", "Adaptation")
 names(adpt.labs) <- c("1", "2")
@@ -175,6 +163,9 @@ names(adpt.labs) <- c("1", "2")
 # New facet label names for CO2 variable
 co2.labs <- c("390ppm", "600ppm")
 names(co2.labs) <- c("0", "210")
+
+map_summary$Crop <- as.factor(map_summary$Crop)
+levels(map_summary$Crop) <- c("Maize", "Rice", "Wheat", "Soybean")
 
 plot_it_noleg <- function(mapNum, gglabel, crop_map) {gg1 + geom_tile(data=mapNum[mapNum$Crop==crop_map,], aes(x=x, y=y, fill=Mean_Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,100), guide = F) + 
     ggtitle(paste0(crop_map,": +", gglabel, "°C")) +
@@ -199,19 +190,39 @@ plot_it <- function(mapNum, gglabel, crop_map) {gg1 + geom_tile(data=mapNum[mapN
 }
 
 ###Plot####
-for(i in 1:length(crop_species)){
-  gg1.5 <- plot_it_noleg(map1.5, "1.5", crop_species[i])
-  gg2 <- plot_it_noleg(map2, "2", crop_species[i])
-  gg3 <- plot_it_noleg(map3, "3", crop_species[i])
+if(rcp45){
+    pdf(file=paste0("allcrops_rcp45",rcp45,".pdf"), height=6, width=9)
+    print(gg1 + geom_tile(data=map_summary, aes(x=x, y=y, fill=Mean_Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,100), name="Yield Change (%)") + 
+      ggtitle(paste0("RCP 4.5")) +
+      facet_grid(Adaptation_level ~ Crop, labeller = labeller(Adaptation_level = adpt.labs)) +
+      theme(#text=element_text(size=8), #change font size of all text
+        axis.text.x=element_text(size=8, angle = 45, vjust = 0.5), #change font size of axis text
+        axis.text.y=element_text(size=8), #change font size of axis titles
+        plot.title=element_text(size=8), #change font size of plot title
+        legend.text=element_text(size=8), #change font size of legend text
+        legend.title=element_text(size=8)) #change font size of legend title
+    )
+    dev.off()
+}else{
+  map1.5 <- map_summary[map_summary$Delta_temp_level == "1.5",]
+  map2 <- map_summary[map_summary$Delta_temp_level == "2",]
+  map3 <- map_summary[map_summary$Delta_temp_level == "3",]
   
-  pdf(file=paste0(crop_species[i],".pdf"), height=6, width=8)
-  multiplot(gg1.5, gg3, gg2, cols=2)
+  for(i in 1:length(crop_species)){
+    gg1.5 <- plot_it_noleg(map1.5, "1.5", crop_species[i])
+    gg2 <- plot_it_noleg(map2, "2", crop_species[i])
+    gg3 <- plot_it_noleg(map3, "3", crop_species[i])
+    
+    pdf(file=paste0(crop_species[i],"_rcp45",rcp45,".pdf"), height=6, width=8)
+    multiplot(gg1.5, gg3, gg2, cols=2)
+    dev.off()
+  }
+  
+  pdf(file="legend.pdf", height=11, width=8)
+  plot_it(map1.5, "1.5", "Maize")
   dev.off()
 }
 
-pdf(file="legend.pdf", height=11, width=8)
-plot_it(map1.5, "1.5", "Maize")
-dev.off()
 #2 = Yes, 1 = No (Yes is default??) #If adapt looks same then forgot to run model as Yes/No
 
 ######Summary stats#####
@@ -227,10 +238,16 @@ map_summary %>%
   dplyr::summarise(Mean = mean(Mean_Effect), 
                    SE = sd(Mean_Effect)/sqrt(n()),
                    n = n())
--19.1--3.81
--6.74-0.357
--9.83--3.58
--13.1--11.5
+#Not RCP
+# -19.1--3.81
+# -6.74-0.357
+# -9.83--3.58
+# -13.1--11.5
+#RCP
+-23.4--8.69
+-5.88-2.65
+-22.7--20.1
+-11.9--6.49
 map_summary %>%
   group_by(Crop) %>%
   dplyr::summarise(Mean = mean(Mean_Effect), 
