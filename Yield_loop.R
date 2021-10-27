@@ -165,6 +165,7 @@ R2_spa_rf_vec<-matrix(nrow=Nb,ncol=4)
 ObsPred <- NULL
 PDPeffs <- NULL
 save.mod.rf <- NULL
+save.Training.rf <- NULL
 
 for (j in 1:Nb) {
   print(j)
@@ -651,6 +652,7 @@ if(do_iml){
 PDPeffs[[j]] <- list(bestEffs[[1]], bestEffs[[2]], bestEffs[[3]], bestEffs[[4]])
 }
 save.mod.rf[[j]] <- list(mod.rf.0[[1]], mod.rf.1[[2]], mod.rf.1[[3]], mod.rf.0[[4]]) 
+save.Training.rf[[j]] <- list(Training_0[[1]], Training_1[[2]], Training_1[[3]], Training_0[[4]])
 }
 
 RESULT <- NULL
@@ -753,6 +755,7 @@ save(PDPeffs, file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes"
 #PDPeffs[[Nb 1-10]][[Crop 1-4]]
 }
 save(save.mod.rf, file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_modrf.RData"))
+save(save.Training.rf,file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_trainingrf.RData"))
 
 end <- Sys.time()
 end - start

@@ -5,6 +5,7 @@ library(dplyr)
 library(ggplot2)
 library(ranger)
 library(raster)
+library(DALEX)
 source('multiplot.R')
 
 #####Switches#####
@@ -12,9 +13,11 @@ same_locations = F
 crop_species = c("Maize","Rice","Wheat","Soybean")
 adaptation_types = F
 rcp45 = T
+do_shap = T
 
 ######Load models and data#####
 load(file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_modrf.RData"))
+load(file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_trainingrf.RData"))
 mdatadir <- "/Users/rzabramoff/ownCloud/Collaborations/Makowski_yield/Data/"
 TAB_p<-read.csv(paste0(mdatadir,"tave_201120.csv"), header=T)
 TAB_p<-na.omit(TAB_p)
@@ -45,33 +48,69 @@ map_of_scenario <- function(Delta_temp_level, CO2.ppm_level, Adaptation_level, m
   #Whole map
   Pred=Pred_rf$predictions
   
-  LAT<-seq(83.75,-55.75, by= -0.5)
-  LONG<-seq(-179.75,179.75,by=0.5)
+  if(do_shap){
+    NewData$Effect <- Pred
+    #NewData <- NewData[,-c(7)]
   
-  MAT <- raster(ncol=720, nrow=280, xmn=-179.75, xmx=179.75, ymn=-55.75, ymx=83.75)
-  Z <- matrix(NA, nrow=280, ncol=720)
-  
-  List_of_latitude<-unique(NewData$Latitude)
-  
-  for (i in List_of_latitude) {
+    set.seed(1234)
+    explain_rf <- DALEX::explain(model = mod.rf.map,  
+                                 data = Training_map, 
+                                 y = Training_map$Effect, 
+                                 label = crop_species_map)  
     
-    LONG_i=(1:720)[LONG%in%NewData$Longitude[NewData$Latitude==i]]
-    LAT_i=(1:280)[LAT==i]
+    shap_co2ppm <- vector(length=dim(NewData)[1])
+    shap_TempAvg <- vector(length=dim(NewData)[1])
+    shap_Delta_temp <- vector(length=dim(NewData)[1])
+    shap_Adaptation <- vector(length=dim(NewData)[1])
+    start.time <- Sys.time()
+    for (m in 1:dim(NewData)[1]){
+      shap_mean <- predict_parts(explainer = explain_rf, 
+                                 new_observation = NewData[m,-7], 
+                                 type = "shap",
+                                 B = 1)
+      shap_co2ppm[m] <- shap_mean[shap_mean$variable_name=="CO2.ppm",]$contribution[1]
+      shap_TempAvg[m] <- shap_mean[shap_mean$variable_name=="TempAvg",]$contribution[1]
+      shap_Delta_temp[m] <- shap_mean[shap_mean$variable_name=="Delta_temp",]$contribution[1]
+      shap_Adaptation[m] <- shap_mean[shap_mean$variable_name=="Adaptation",]$contribution[1]
+    }
+    end.time <- Sys.time()
+    end.time-start.time
     
-    Z[LAT_i, LONG_i]<-Pred[NewData$Latitude==i]
+    save(shap_co2ppm, file=paste0(crop_species[k], "_Nb",j,"_Adapt",i,"_shap_co2ppm_4.5.RData"))
+    save(shap_TempAvg, file=paste0(crop_species[k],"_Nb",j,"_Adapt",i,"_shap_TempAvg_4.5.RData"))
+    save(shap_Delta_temp, file=paste0(crop_species[k],"_Nb",j,"_Adapt",i,"_shap_Delta_temp_4.5.RData"))
+    save(shap_Adaptation, file=paste0(crop_species[k],"_Nb",j,"_Adapt",i,"_shap_Adaptation_4.5.RData"))
+
+    return("shaps done")
+  }else{
+    LAT<-seq(83.75,-55.75, by= -0.5)
+    LONG<-seq(-179.75,179.75,by=0.5)
     
+    MAT <- raster(ncol=720, nrow=280, xmn=-179.75, xmx=179.75, ymn=-55.75, ymx=83.75)
+    Z <- matrix(NA, nrow=280, ncol=720)
+    
+    List_of_latitude<-unique(NewData$Latitude)
+    
+    for (i in List_of_latitude) {
+      
+      LONG_i=(1:720)[LONG%in%NewData$Longitude[NewData$Latitude==i]]
+      LAT_i=(1:280)[LAT==i]
+      
+      Z[LAT_i, LONG_i]<-Pred[NewData$Latitude==i]
+      
+    }
+    
+    MAT<-setValues(MAT, Z)
+    
+    test_spdf <- as(MAT, "SpatialPixelsDataFrame")
+    test_df <- as.data.frame(test_spdf)
+    colnames(test_df) <- c("Effect", "x", "y")
+    test_df$Delta_temp_level <- rep(Delta_temp_level, dim(test_df)[1])
+    test_df$CO2.ppm_level <- rep(CO2.ppm_level, dim(test_df)[1])
+    test_df$Adaptation_level <- rep(Adaptation_level, dim(test_df)[1])
+    
+    return(test_df)
   }
-  
-  MAT<-setValues(MAT, Z)
-  
-  test_spdf <- as(MAT, "SpatialPixelsDataFrame")
-  test_df <- as.data.frame(test_spdf)
-  colnames(test_df) <- c("Effect", "x", "y")
-  test_df$Delta_temp_level <- rep(Delta_temp_level, dim(test_df)[1])
-  test_df$CO2.ppm_level <- rep(CO2.ppm_level, dim(test_df)[1])
-  test_df$Adaptation_level <- rep(Adaptation_level, dim(test_df)[1])
-  
-  return(test_df)
 }
 
 # #Delta_temp_level = 2; CO2.ppm_level=0; Adaptation_level=1
@@ -94,7 +133,6 @@ map_df_all_crop <- NULL
 start <- Sys.time()
 for(k in 1:4){
   crop_species_map = crop_species[[k]]
-  #Training_map = Training_1[[k]] ##STOPPED save trainings in yield loop? Not needed yet
   #Filter by cropping areas
   Area_crop<-read.csv(paste0(mdatadir,crop_species_map,"_country.csv"), header=T)
   TAB_p_f<-right_join(Area_crop,TAB_p, by=c("x","y"))
@@ -103,6 +141,7 @@ for(k in 1:4){
   
   for (j in 1:10){
     mod.rf.map <- save.mod.rf[[j]][[k]]
+    Training_map <- save.Training.rf[[j]][[k]]
 
     for(i in 1:length(Delta_temp_levels)){
       map_df[[i]] <- map_of_scenario(Delta_temp_levels[i], CO2.ppm_levels[i], Adaptation_levels[i], mod.rf.map)
