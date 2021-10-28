@@ -12,12 +12,12 @@ source('multiplot.R')
 same_locations = F
 crop_species = c("Maize","Rice","Wheat","Soybean")
 adaptation_types = F
-rcp45 = T
-do_shap = T
+rcp45 = F
+do_shap = F
 
 ######Load models and data#####
-load(file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_modrf.RData"))
-load(file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_trainingrf.RData"))
+load(file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_modrf_allTRUE.RData"))
+load(file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_trainingrf_allTRUE.RData"))
 mdatadir <- "/Users/rzabramoff/ownCloud/Collaborations/Makowski_yield/Data/"
 TAB_p<-read.csv(paste0(mdatadir,"tave_201120.csv"), header=T)
 TAB_p<-na.omit(TAB_p)
@@ -31,13 +31,13 @@ xlabels <- makelabelsEW(xbreaks)
 ybreaks <- seq(-90,90,30)
 ylabels <- makelabelsNS(ybreaks)
 gg1 <- ggplot() + 
-  geom_polygon(data = wrld, aes(x=long, y = lat, group = group), fill = "lightgray", color = "black") + 
+  geom_polygon(data = wrld, aes(x=long, y = lat, group = group), fill = "lightgray", color = "lightgray") + 
   coord_fixed(1.3) + 
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank(), axis.line = element_line(colour = "black"), axis.ticks = element_blank(), legend.position="bottom",legend.title=element_text(size=15), 
         legend.text=element_text(size=12), axis.text = element_text(size=12))+
   scale_x_continuous("", breaks = xbreaks, labels = xlabels) +
-  scale_y_continuous("", breaks = ybreaks, labels = ylabels)
+  scale_y_continuous("", breaks = ybreaks, labels = ylabels, limits=c(-60,90))
 
 map_of_scenario <- function(Delta_temp_level, CO2.ppm_level, Adaptation_level, mod.rf.map){
   NewData <- data.frame(Delta_temp=rep(Delta_temp_level, N),CO2.ppm=rep(CO2.ppm_level,N),Adaptation=rep(Adaptation_level,N),TempAvg=TAB_p_f$Tave, Latitude=TAB_p_f$y, Longitude=TAB_p_f$x)
@@ -139,7 +139,7 @@ for(k in 1:4){
   TAB_p_f<-TAB_p_f[TAB_p_f$Total*TAB_p_f$Flag>0,]
   N<-nrow(TAB_p_f)
   
-  for (j in 1:10){
+  for (j in 1:1){
     mod.rf.map <- save.mod.rf[[j]][[k]]
     Training_map <- save.Training.rf[[j]][[k]]
 

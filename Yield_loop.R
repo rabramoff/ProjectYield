@@ -23,10 +23,11 @@ require(MuMIn)
 #####Switches#####
 same_locations = F
 crop_species = c("Maize","Rice","Wheat","Soybean")
-adaptation_types = F
-do_iml = F
-Nb<-10
+adaptation_types = T
+do_iml = T
+Nb<-1
 run_all_mods = F
+train_on_all = T
 
 start <- Sys.time()
 
@@ -257,14 +258,22 @@ for (i in 1:length(crop_species)){
     ID_loc<-sample(x=UnLoc, size=round(0.25*length(UnLoc)))
     ID<-(1:nrow(df[[i]]))[Loc%in%ID_loc==TRUE]
   }
-  
+
+if(train_on_all){
+  Training_xy[[i]]<-df_xy[[i]]
+  Testing_xy[[i]]<-df[[i]]
+  Training_1[[i]]<-df[[i]]
+  Testing_1[[i]]<-df[[i]]
+  Training_2[[i]]<-df_lm[[i]]
+  Testing_2[[i]]<-df_lm[[i]]
+}else{
   Training_xy[[i]]<-df_xy[[i]][-ID,]
   Testing_xy[[i]]<-df[[i]][ID,]
   Training_1[[i]]<-df[[i]][-ID,]
   Testing_1[[i]]<-df[[i]][ID,]
   Training_2[[i]]<-df_lm[[i]][-ID,]
   Testing_2[[i]]<-df_lm[[i]][ID,]
-  
+}
 }
 
 #####Training and Testing#####
@@ -747,15 +756,15 @@ for(i in 1:length(crop_species)){
 }
 
 RESULT_ALL <- rbind(RESULT[[1]], RESULT[[2]],RESULT[[3]], RESULT[[4]])
-write.csv(file=paste0("samelocs",same_locations,"_adaptationtypes",adaptation_types,"_stats_loop.csv"),RESULT_ALL)
-save.image(file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_loop.RData"))
-save(ObsPred, file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_store_predictions.RData"))
+write.csv(file=paste0("samelocs",same_locations,"_adaptationtypes",adaptation_types,"_stats_loop_all",train_on_all,".csv"),RESULT_ALL)
+save.image(file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_loop_all",train_on_all,".RData"))
+save(ObsPred, file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_store_predictions_all",train_on_all,".RData"))
 if(do_iml){
-save(PDPeffs, file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_store_PDPs.RData"))
+save(PDPeffs, file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_store_PDPs_all",train_on_all,".RData"))
 #PDPeffs[[Nb 1-10]][[Crop 1-4]]
 }
-save(save.mod.rf, file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_modrf.RData"))
-save(save.Training.rf,file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_trainingrf.RData"))
+save(save.mod.rf, file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_modrf_all",train_on_all,".RData"))
+save(save.Training.rf,file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_trainingrf_all",train_on_all,".RData"))
 
 end <- Sys.time()
 end - start
