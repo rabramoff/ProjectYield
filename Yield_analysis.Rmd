@@ -78,6 +78,7 @@ Planting_time <- as.factor(TAB$Planting.time)
 Tillage <- as.factor(TAB$Tillage)
 Others <- as.factor(TAB$Others)
 }
+
 ```
 #Maps prep
 ```{r}
@@ -98,19 +99,21 @@ panel.background = element_blank(), axis.line = element_line(colour = "black"), 
  scale_y_continuous("", breaks = ybreaks, labels = ylabels, limits=c(-60,90))
 
 map_of_df <- function(DATA,crop_species){
-gg1 + geom_point(data=DATA, aes(x=Longitude, y=Latitude, color=Effect), pch=16, size=1) + scale_color_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,100)) + ggtitle(crop_species) +
+gg1 + geom_point(data=DATA, aes(x=Longitude, y=Latitude, color=Effect), pch=16, size=1) + scale_color_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,140), breaks=c(-100,0,100)) + ggtitle(crop_species) +
 labs(color="Yield Change (%)")
 }
 
 hist_of_df <- function(DATA,crop_species){
 ggplot(data=DATA, aes(x=Effect)) + 
- geom_histogram() + theme_classic() + ggtitle(crop_species) + scale_fill_continuous() + xlim(-100,150) +
+ geom_histogram() + theme_classic() + ggtitle(crop_species) + scale_fill_continuous() + xlim(-100,140) +
 geom_vline(aes(xintercept = mean(Effect)),col='red', lty=2) + geom_vline(aes(xintercept = median(Effect)),col='blue', lty=2) + xlab("Yield Change (%)")
 }
 
 map_testing_training <- function(DATA,crop_species){
 gg1 + geom_point(data=Training_1[[i]], aes(x=Longitude, y=Latitude), color="darkblue", pch=16, size=1) + geom_point(data=Testing_1[[i]], aes(x=Longitude, y=Latitude), color="darkred", pch=16, size=1) + ggtitle(crop_species)
 }
+
+
 ```
 
 #Prep and split data
@@ -195,11 +198,14 @@ print(sd(df[[i]]$Effect)/sqrt(length(df[[i]]$Effect)))
 #Make Plots
 ##Make obs v pred pred plots
 ```{r}
-load("saved_MLs_samelocsFALSE_adaptationtypesFALSE_store_predictions_allFALSE.Rdata")
+load(paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_store_predictions_allFALSE.Rdata"))
+#load("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_store_predictions_allTRUE.Rdata")
+
 AllOP <- bind_rows(ObsPred, .id = "column_label")
 FormOP <- AllOP %>%
   tidyr::pivot_longer(cols=c(Predicted, Observed), names_to="Type") %>%
   group_by(Crop, Site, Type) %>%
+  
   dplyr::summarise(mean = mean(value),
             se = sd(value)/sqrt(n()),
             n = n()) %>%
@@ -346,4 +352,254 @@ pdf(file=paste0("adaptation",adaptation_types,"_PDPs_legend.pdf"), height=5, wid
     p7
 dev.off()
 ```
+
+##Make Shap plots
+###Set switches and load plot function
+```{r}
+adaptation_types = FALSE
+AdaptLevel = 1
+runsdir = "/Users/rzabramoff/ownCloud/Collaborations/Makowski_yield/"
+shap_df <- NULL
+
+map_of_scenario <- function(AdaptLevel){
+  NewData <- data.frame(Delta_temp=rep(2, N),CO2.ppm=rep(116,N),Adaptation=rep(AdaptLevel,N),TempAvg=TAB_p_f$Tave, Latitude=TAB_p_f$y, Longitude=TAB_p_f$x)
+  
+LAT<-seq(83.75,-55.75, by= -0.5)
+    LONG<-seq(-179.75,179.75,by=0.5)
+    
+    MAT <- raster(ncol=720, nrow=280, xmn=-179.75, xmx=179.75, ymn=-55.75, ymx=83.75)
+    W <- matrix(NA, nrow=280, ncol=720)
+    X <- matrix(NA, nrow=280, ncol=720)
+    Y <- matrix(NA, nrow=280, ncol=720)
+    Z <- matrix(NA, nrow=280, ncol=720)
+    
+    List_of_latitude<-unique(NewData$Latitude)
+    
+    for (i in List_of_latitude) {
+      
+      LONG_i=(1:720)[LONG%in%NewData$Longitude[NewData$Latitude==i]]
+      LAT_i=(1:280)[LAT==i]
+      
+      W[LAT_i, LONG_i]<-shap_TempAvg[NewData$Latitude==i]
+      X[LAT_i, LONG_i]<-shap_Delta_temp[NewData$Latitude==i]
+      Y[LAT_i, LONG_i]<-shap_co2ppm[NewData$Latitude==i]
+      Z[LAT_i, LONG_i]<-shap_Adaptation[NewData$Latitude==i]
+      
+    }
+    
+    MATW<-setValues(MAT, W)
+    MATX<-setValues(MAT, X)
+    MATY<-setValues(MAT, Y)
+    MATZ<-setValues(MAT, Z)
+    
+    test_dfW <- as.data.frame(as(MATW, "SpatialPixelsDataFrame"))
+    colnames(test_dfW) <- c("TempAvg", "x", "y")
+    test_dfX <- as.data.frame(as(MATX, "SpatialPixelsDataFrame"))
+    colnames(test_dfX) <- c("Delta_temp", "x", "y")
+    test_dfY <- as.data.frame(as(MATY, "SpatialPixelsDataFrame"))
+    colnames(test_dfY) <- c("co2ppm", "x", "y")
+    test_dfZ <- as.data.frame(as(MATZ, "SpatialPixelsDataFrame"))
+    colnames(test_dfZ) <- c("Adaptation", "x", "y")
+    
+    test_df <- test_dfW %>% inner_join(test_dfX) %>% inner_join(test_dfY) %>% inner_join(test_dfZ) %>% tidyr::pivot_longer(c("TempAvg","Delta_temp","co2ppm","Adaptation"), names_to = "Variable", values_to = "Effect")
+    
+    test_df$Delta_temp_level <- rep(2, dim(test_df)[1])
+    test_df$CO2.ppm_level <- rep(116, dim(test_df)[1])
+    test_df$Adaptation_level <- rep(AdaptLevel, dim(test_df)[1])
+    
+    return(test_df)
+  }
+```
+
+###Plot the shapley plots
+```{r}
+for(k in 1:length(crop_species)){
+
+load(paste0(runsdir,crop_species[k], "_Nb1_Adapt",AdaptLevel,"_shap_co2ppm_4.5.RData"))
+load(paste0(runsdir,crop_species[k], "_Nb1_Adapt",AdaptLevel,"_shap_TempAvg_4.5.RData"))
+load(paste0(runsdir,crop_species[k], "_Nb1_Adapt",AdaptLevel,"_shap_Delta_temp_4.5.RData"))
+load(paste0(runsdir,crop_species[k], "_Nb1_Adapt",AdaptLevel,"_shap_Adaptation_4.5.RData"))
+
+  #Filter by cropping areas
+TAB_p<-read.csv(paste0(mdatadir,"tave_201120.csv"), header=T)
+TAB_p<-na.omit(TAB_p)
+  Area_crop<-read.csv(paste0(mdatadir,crop_species[[k]],"_country.csv"), header=T)
+  TAB_p_f<-right_join(Area_crop,TAB_p, by=c("x","y"))
+  TAB_p_f<-TAB_p_f[TAB_p_f$Total*TAB_p_f$Flag>0,]
+  N<-nrow(TAB_p_f)
+
+      map_df <- map_of_scenario(AdaptLevel)
+
+      shap_df[[k]] <- map_df %>% tidyr::pivot_wider(names_from="Variable",values_from="Effect")
+      
+    ## Rename levels (I used data.table::melt, so they were characters)
+map_df$Variable <- factor(map_df$Variable, 
+                        levels=c("Adaptation", "co2ppm", "Delta_temp", "TempAvg"),
+                        labels=c("Adaptation", expression(Delta~"CO"[2]~"ppm above 390 ppm"), expression(Delta~" Temperature"~degree~"C"), expression("Average Temperature"~degree~"C")))
+
+    pdf(file=paste0("shap_rcp45_",crop_species[k],"_Adapt",AdaptLevel,".pdf"), height=6, width=9)
+    print(gg1 + geom_tile(data=map_df, aes(x=x, y=y, fill=Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", name="Shapley Value") + #, limits=c(-100,100)) + 
+      ggtitle(paste0(crop_species[k])) +
+      facet_wrap(Variable ~ ., nrow=2, labeller = label_parsed) +
+      theme(#text=element_text(size=8), #change font size of all text
+        axis.text.x=element_text(size=8, angle = 45, vjust = 0.5), #change font size of axis text
+        axis.text.y=element_text(size=8), #change font size of axis titles
+        plot.title=element_text(size=8), #change font size of plot title
+        legend.text=element_text(size=8), #change font size of legend text
+        legend.title=element_text(size=8)) #change font size of legend title
+    )
+    dev.off()
+    
+#Max abs Shap value plots
+absshaps <- cbind(abs(shap_TempAvg), abs(shap_Delta_temp), abs(shap_co2ppm), abs(shap_Adaptation))
+shaps <- cbind(shap_TempAvg, shap_Delta_temp, shap_co2ppm, shap_Adaptation)
+colnames(absshaps) <- c("Temperature","DeltaTemp","CO2ppm","Adaptation")
+colnames(shaps) <- c("Temperature","DeltaTemp","CO2ppm","Adaptation")
+
+shap_df[[k]]$maxabsshaps <- colnames(absshaps)[apply(absshaps,1,which.max)]
+shap_df[[k]]$maxshaps <- colnames(shaps)[apply(shaps,1,which.max)]
+shap_df[[k]]$minshaps <- colnames(shaps)[apply(shaps,1,which.min)]
+shap_df[[k]]$Crop <- rep(crop_species[k], dim(shap_df[[k]])[1])
+
+pdf(file=paste0("shaphist_",crop_species[k],"_Adapt",AdaptLevel,".pdf"), height=5, width=5)
+par(mfrow=c(2,2))
+hist(shap_TempAvg, main=expression("Average Temperature"~degree~"C"), xlab="Shapley Value")
+hist(shap_Delta_temp, main=expression(Delta~" Temperature"~degree~"C"), xlab="Shapley Value")
+hist(shap_co2ppm, main=expression(Delta~"CO"[2]~"ppm above 390 ppm"), xlab="Shapley Value")
+hist(shap_Adaptation, main=expression("Adaptation"), xlab="Shapley Value")
+dev.off()
+
+}
+```
+
+###Plot maxshap value plots
+```{r}
+shap_df_map <- do.call("rbind", shap_df)
+var.labs <- c(expression("Adaptation"), expression(Delta~"CO"[2]~"ppm"), expression(Delta~" Temperature"~degree~"C"), expression("Average Temperature"~degree~"C"))
+
+    pdf(file=paste0("shapmax_Adapt",AdaptLevel,".pdf"), height=6, width=9)
+    print(gg1 + geom_tile(data=shap_df_map, aes(x=x, y=y, fill=maxshaps), alpha=0.8) + scale_fill_manual(values = c(cbPalette[5], cbPalette[6], cbPalette[7], cbPalette[8]), labels=var.labs) +  
+      facet_wrap(Crop ~ ., nrow=2) +
+      theme(#text=element_text(size=8), #change font size of all text
+        axis.text.x=element_text(size=8, angle = 45, vjust = 0.5), #change font size of axis text
+        axis.text.y=element_text(size=8), #change font size of axis titles
+        plot.title=element_text(size=8), #change font size of plot title
+        legend.text=element_text(size=8), #change font size of legend text
+        legend.title=element_blank()) #change font size of legend title
+    )
+    dev.off()
+    
+      pdf(file=paste0("barplot_shapmax_Adapt",AdaptLevel,".pdf"), height=6, width=9)
+    print(ggplot(shap_df_map, aes(x=maxshaps)) + geom_bar() + scale_fill_manual(values = c(cbPalette[5], cbPalette[6], cbPalette[7], cbPalette[8]), labels=var.labs) + 
+      facet_wrap(Crop ~ ., nrow=2) +
+      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"), axis.ticks = element_blank(), 
+      axis.text = element_text(size=12),
+      axis.text.x=element_text(size=8, angle = 45, vjust = 0.5),
+      axis.text.y=element_text(size=8), 
+      plot.title=element_text(size=8), 
+      legend.text=element_text(size=8), 
+      legend.title=element_blank()) +
+      ylab("Count") +
+      xlab("") +
+  scale_x_discrete("", labels = var.labs)
+    )
+    
+        pdf(file=paste0("shapmin_Adapt",AdaptLevel,".pdf"), height=6, width=9)
+    print(gg1 + geom_tile(data=shap_df_map, aes(x=x, y=y, fill=minshaps), alpha=0.8) + scale_fill_manual(values = c(cbPalette[5], cbPalette[6], cbPalette[7], cbPalette[8]), labels=var.labs) +
+      facet_wrap(Crop ~ ., nrow=2) +
+      theme(#text=element_text(size=8), #change font size of all text
+        axis.text.x=element_text(size=8, angle = 45, vjust = 0.5), #change font size of axis text
+        axis.text.y=element_text(size=8), #change font size of axis titles
+        plot.title=element_text(size=8), #change font size of plot title
+        legend.text=element_text(size=8), #change font size of legend text
+        legend.title=element_blank()) #change font size of legend title
+    )
+    dev.off()
+    
+      pdf(file=paste0("barplot_shapmin_Adapt",AdaptLevel,".pdf"), height=6, width=9)
+    print(ggplot(shap_df_map, aes(x=minshaps)) + geom_bar() + scale_fill_manual(values = c(cbPalette[5], cbPalette[6], cbPalette[7], cbPalette[8]), labels=var.labs) + 
+      facet_wrap(Crop ~ ., nrow=2) +
+      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"), axis.ticks = element_blank(), 
+      axis.text = element_text(size=12),
+      axis.text.x=element_text(size=8, angle = 45, vjust = 0.5),
+      axis.text.y=element_text(size=8), 
+      plot.title=element_text(size=8), 
+      legend.text=element_text(size=8), 
+      legend.title=element_blank()) +
+      ylab("Count") +
+      xlab("") +
+  scale_x_discrete("", labels = var.labs)
+    )
+    
+        pdf(file=paste0("shapabsmax_Adapt",AdaptLevel,".pdf"), height=6, width=9)
+    print(gg1 + geom_tile(data=shap_df_map, aes(x=x, y=y, fill=maxabsshaps), alpha=0.8) + scale_fill_manual(values = c(cbPalette[5], cbPalette[6], cbPalette[7], cbPalette[8]), labels=var.labs) + 
+      facet_wrap(Crop ~ ., nrow=2) +
+      theme(#text=element_text(size=8), #change font size of all text
+        axis.text.x=element_text(size=8, angle = 45, vjust = 0.5), #change font size of axis text
+        axis.text.y=element_text(size=8), #change font size of axis titles
+        plot.title=element_text(size=8), #change font size of plot title
+        legend.text=element_text(size=8), #change font size of legend text
+        legend.title=element_blank()) #change font size of legend title
+    )
+    dev.off()
+    
+        pdf(file=paste0("barplot_shapabsmax_Adapt",AdaptLevel,".pdf"), height=6, width=9)
+    print(ggplot(shap_df_map, aes(x=maxabsshaps)) + geom_bar() + scale_fill_manual(values = c(cbPalette[5], cbPalette[6], cbPalette[7], cbPalette[8]), labels=var.labs) + 
+      facet_wrap(Crop ~ ., nrow=2) +
+      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"), axis.ticks = element_blank(), 
+      axis.text = element_text(size=12),
+      axis.text.x=element_text(size=8, angle = 45, vjust = 0.5),
+      axis.text.y=element_text(size=8), 
+      plot.title=element_text(size=8), 
+      legend.text=element_text(size=8), 
+      legend.title=element_blank()) +
+      ylab("Count") +
+      xlab("") +
+  scale_x_discrete("", labels = var.labs)
+    )
+    dev.off()
+    
+save(shap_df_map, file=paste0(AdaptLevel,"_ShapdfMap.RData"))
+```
+
+#Summaries
+```{r}
+table(shap_df_map$maxabsshaps, by=shap_df_map$Crop)
+table(shap_df_map$maxshaps, by=shap_df_map$Crop)
+table(shap_df_map$minshaps, by=shap_df_map$Crop)
+
+summary(shap_df_map[shap_df_map$Crop=="Maize",]$Adaptation)
+summary(shap_df_map[shap_df_map$Crop=="Maize",]$TempAvg)
+```
+
+#Formatted Fig3plot
+##Load shapmaps
+```{r}
+load("1_ShapdfMap.RData")
+adpt1shap <- shap_df_map
+load("2_ShapdfMap.RData")
+adpt2shap <- shap_df_map
+```
+
+##Merge and plot
+```{r}
+adptshap <- rbind(adpt1shap, adpt2shap)
+    
+#WORKING - max yield change with adaptation - min yield change without adaptation??
+      print(gg1 + geom_tile(data=adptshap, aes(x=x, y=y, fill=maxabsshaps), alpha=0.8) + scale_fill_manual(values = c(cbPalette[5], cbPalette[6], cbPalette[7], cbPalette[8]), labels=var.labs) + 
+      facet_wrap(Crop ~ ., nrow=2) +
+      theme(#text=element_text(size=8), #change font size of all text
+        axis.text.x=element_text(size=8, angle = 45, vjust = 0.5), #change font size of axis text
+        axis.text.y=element_text(size=8), #change font size of axis titles
+        plot.title=element_text(size=8), #change font size of plot title
+        legend.text=element_text(size=8), #change font size of legend text
+        legend.title=element_blank()) #change font size of legend title
+    )
+    
+```
+
+
 

@@ -12,7 +12,7 @@ source('multiplot.R')
 same_locations = F
 crop_species = c("Maize","Rice","Wheat","Soybean")
 adaptation_types = F
-rcp45 = F
+rcp45 = T
 do_shap = F
 
 ######Load models and data#####
@@ -76,10 +76,10 @@ map_of_scenario <- function(Delta_temp_level, CO2.ppm_level, Adaptation_level, m
     end.time <- Sys.time()
     end.time-start.time
     
-    save(shap_co2ppm, file=paste0(crop_species[k], "_Nb",j,"_Adapt",i,"_shap_co2ppm_4.5.RData"))
-    save(shap_TempAvg, file=paste0(crop_species[k],"_Nb",j,"_Adapt",i,"_shap_TempAvg_4.5.RData"))
-    save(shap_Delta_temp, file=paste0(crop_species[k],"_Nb",j,"_Adapt",i,"_shap_Delta_temp_4.5.RData"))
-    save(shap_Adaptation, file=paste0(crop_species[k],"_Nb",j,"_Adapt",i,"_shap_Adaptation_4.5.RData"))
+    save(shap_co2ppm, file=paste0(crop_species[k], "_Nb",1,"_Adapt",i,"_shap_co2ppm_4.5.RData"))
+    save(shap_TempAvg, file=paste0(crop_species[k],"_Nb",1,"_Adapt",i,"_shap_TempAvg_4.5.RData"))
+    save(shap_Delta_temp, file=paste0(crop_species[k],"_Nb",1,"_Adapt",i,"_shap_Delta_temp_4.5.RData"))
+    save(shap_Adaptation, file=paste0(crop_species[k],"_Nb",1,"_Adapt",i,"_shap_Adaptation_4.5.RData"))
 
     return("shaps done")
   }else{
@@ -139,25 +139,17 @@ for(k in 1:4){
   TAB_p_f<-TAB_p_f[TAB_p_f$Total*TAB_p_f$Flag>0,]
   N<-nrow(TAB_p_f)
   
-  for (j in 1:1){
-    mod.rf.map <- save.mod.rf[[j]][[k]]
-    Training_map <- save.Training.rf[[j]][[k]]
+    mod.rf.map <- save.mod.rf[[1]][[k]]
+    Training_map <- save.Training.rf[[1]][[k]]
 
     for(i in 1:length(Delta_temp_levels)){
       map_df[[i]] <- map_of_scenario(Delta_temp_levels[i], CO2.ppm_levels[i], Adaptation_levels[i], mod.rf.map)
     }
    
 
-    map_df_all[[j]] <- do.call(rbind.data.frame,map_df)
-      #rbind(map_df[[1]], map_df[[2]], map_df[[3]], map_df[[4]], map_df[[5]], 
-                            # map_df[[6]], map_df[[7]], map_df[[8]], map_df[[9]], map_df[[10]], 
-                            # map_df[[11]], map_df[[12]]) 
-  }
+    map_df_all[[1]] <- do.call(rbind.data.frame,map_df)
 
-    map_df_all_crop[[k]] <- do.call(list,map_df_all)
-      #list(map_df_all[[1]], map_df_all[[2]], map_df_all[[3]], map_df_all[[4]], 
-                                   #map_df_all[[5]], map_df_all[[6]], map_df_all[[7]], map_df_all[[8]], 
-                                   #map_df_all[[9]], map_df_all[[10]]) 
+    map_df_all_crop[[k]] <- map_df_all[[1]]
   
 }
 end <- Sys.time()
@@ -206,7 +198,7 @@ names(co2.labs) <- c("0", "210")
 map_summary$Crop <- as.factor(map_summary$Crop)
 levels(map_summary$Crop) <- c("Maize", "Rice", "Wheat", "Soybean")
 
-plot_it_noleg <- function(mapNum, gglabel, crop_map) {gg1 + geom_tile(data=mapNum[mapNum$Crop==crop_map,], aes(x=x, y=y, fill=Mean_Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,100), guide = F) + 
+plot_it_noleg <- function(mapNum, gglabel, crop_map) {gg1 + geom_tile(data=mapNum[mapNum$Crop==crop_map,], aes(x=x, y=y, fill=Mean_Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,150), guide = F) + 
     ggtitle(paste0(crop_map,": +", gglabel, "°C")) +
     facet_grid(Adaptation_level ~ CO2.ppm_level, labeller = labeller(Adaptation_level = adpt.labs, CO2.ppm_level = co2.labs)) +
     theme(#text=element_text(size=8), #change font size of all text

@@ -23,8 +23,8 @@ require(MuMIn)
 #####Switches#####
 same_locations = F
 crop_species = c("Maize","Rice","Wheat","Soybean")
-adaptation_types = T
-do_iml = T
+adaptation_types = F
+do_iml = F
 Nb<-1
 run_all_mods = F
 train_on_all = T
