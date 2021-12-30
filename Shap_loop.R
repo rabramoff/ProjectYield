@@ -22,6 +22,7 @@ mdatadir <- "/Users/rzabramoff/ownCloud/Collaborations/Makowski_yield/Data/"
 TAB_p<-read.csv(paste0(mdatadir,"tave_201120.csv"), header=T)
 TAB_p<-na.omit(TAB_p)
 
+#STOPPED HERE ADDING IN PRECIP
 #####Maps prep#####
 makelabelsEW <- function(x) {ifelse(x < 0, parse(text=paste0(x,"^o", "*W")), ifelse(x > 0, parse(text=paste0(x,"^o", "*E")),x))}
 makelabelsNS <- function(x) {ifelse(x < 0, parse(text=paste0(x,"^o", "*S")), ifelse(x > 0, parse(text=paste0(x,"^o", "*N")),x))}

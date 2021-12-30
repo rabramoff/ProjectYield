@@ -5,7 +5,7 @@ output: html_document
 ```
 ####David Makowski INRAE###
 ####18/02/2021####
-#Edited by Rose Abramoff - starting 22/02/2021
+#Developed further by Rose Abramoff - starting 22/02/2021
 ```
 #Load libraries
 ```{r load-libraries}
@@ -42,9 +42,9 @@ source('multiplot.R')
 
 #Data import
 ```{r data-import}
-datadir <- "/Users/rzabramoff/ownCloud/Collaborations/Makowski_yield/14691579/"
+datadir <- "/Users/rzabramoff/ownCloud/Collaborations/Makowski_yield/14691579 2/"
 mdatadir <- "/Users/rzabramoff/ownCloud/Collaborations/Makowski_yield/Data/"
-TAB<-read.xlsx(paste0(datadir,"Projected_Impacts_datasheet.xlsx"), sheet=1)
+TAB<-read.xlsx(paste0(datadir,"Projected_Impacts_datasheet_11.24.2021.xlsx"), sheet=1)
 head(TAB)
 
 #Extraction of columns
@@ -60,12 +60,14 @@ CO2.ppm<-TAB$CO2.ppm-390
 CO2.ppm[CO2=="No"]<-0
 Adaptation<-as.factor(TAB$Adaptation)
 RCP<-as.factor(TAB$Climate.scenario)
-TempAvg<-as.numeric(TAB$Current.Average.Temperature)
+TempAvg<-as.numeric(TAB$`Current.Average.Temperature.(dC)_area_weighted`)
 Latitude<-TAB$latitude
 Longitude<-TAB$longitude
 Baseline<-TAB$"Baseline_Mid-point"
 Future<-TAB$"Future_Mid-point"
 Future_s<-scale(Future)
+Precip<-TAB$`Current.Annual.Precipitation.(mm)._area_weighted`
+Delta_precip<-TAB$`Annual.Precipitation.change.from.2005.(mm)`
 
 if(adaptation_types){
 #Adaptation <- as.factor(TAB$Adaptation.type)
@@ -80,6 +82,28 @@ Others <- as.factor(TAB$Others)
 }
 
 ```
+
+#TEMP: explore temp and precip
+```{r}
+#plot(TAB$`Current.Average.Temperature.(dC)_area_weighted`, Effect)
+#plot(TAB$`Current.Average.Temperature_point_coordinate.(dC)`,Effect)
+
+plot(TAB$Local.delta.T.from.2005, Effect) #may be useful
+plot(TAB$Global.delta.T.from.2005, Effect)
+
+#plot(TAB$`Current.Annual.Precipitation.(mm)._area_weighted`, Effect)
+#plot(TAB$`Current.Annual.Precipitation.(mm)._point_coordinate`, Effect)
+
+#Change in precip was estimated from current precip and the other stuff, so not sure it is useful to consider changes but could try it...
+plot(TAB$`Base.precipitation.(annual).(mm).(local.base.period)`, Effect)
+plot(TAB$`Base.precipitation.(seasonal).(mm).(local.base.period)`, Effect)
+plot(TAB$`Annual.Precipitation.change.each.study.(mm)`, Effect)
+plot(TAB$`Annual.Precipitation.change.from.2005.(mm)`, Effect)
+plot(TAB$`Annual.Preciptation.change.(%).(relative.to.local.base)`, Effect)
+plot(TAB$`Seasonal.Precipitation.change.(mm).each.study.(local.baseperiod)`, Effect)
+```
+
+
 #Maps prep
 ```{r}
 makelabelsEW <- function(x) {ifelse(x < 0, parse(text=paste0(x,"^o", "*W")), ifelse(x > 0, parse(text=paste0(x,"^o", "*E")),x))}
@@ -121,19 +145,19 @@ gg1 + geom_point(data=Training_1[[i]], aes(x=Longitude, y=Latitude), color="dark
 if(adaptation_types){
     if(same_locations){
       Loca<-paste(Longitude,Latitude, sep="_") 
-        DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,TempAvg, y=Latitude, x=Longitude, Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others,Loca)
+        DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,TempAvg,Precip, Delta_precip, y=Latitude, x=Longitude, Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others,Loca)
     } else {
-        DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,TempAvg, y=Latitude, x=Longitude, Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others)
+        DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,TempAvg,Precip, Delta_precip, y=Latitude, x=Longitude, Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others)
     }
-      DATA<-data.frame(Effect,Species,Delta_temp,CO2.ppm,TempAvg, Future, Latitude, Longitude,Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others)
+      DATA<-data.frame(Effect,Species,Delta_temp,CO2.ppm,TempAvg,Precip, Delta_precip, Future, Latitude, Longitude,Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others)
 }else{
     if(same_locations){
       Loca<-paste(Longitude,Latitude, sep="_") 
-        DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg, y=Latitude, x=Longitude, Loca)
+        DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg,Precip, Delta_precip, y=Latitude, x=Longitude, Loca)
     } else {
-        DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg, y=Latitude, x=Longitude)
+        DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg,Precip, Delta_precip, y=Latitude, x=Longitude)
     }
-      DATA<-data.frame(Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg, Latitude, Longitude)
+      DATA<-data.frame(Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg,Precip,Delta_precip, Latitude, Longitude)
 }
 
 df <- NULL
@@ -185,8 +209,10 @@ print(hist_of_df(df[[i]],crop_species[i]))
 
 #Describe data
 ```{r}
+Locs <- NULL
 #samples
 for(i in 1:length(crop_species)){
+Locs[[i]]<-paste(df[[i]]$Longitude,df[[i]]$Latitude, sep="_")
 print(c(dim(df[[i]])[1], crop_species[i], "samples"))
 print(c(length(unique(Locs[[i]])), crop_species[i], "locations"))
 print(summary(df[[i]]$Effect))
@@ -222,6 +248,7 @@ pdf(file=paste0("FigureS3_samelocs",same_locations,"_adaptypes",adaptation_types
     facet_wrap(~Crop) + theme_bw()
 dev.off()
 ```
+#STOPPED HERE ADDING IN PRECIP, then do Yield Loop and Shap Loop
 
 ##Make PDP plots
 ###Load the data
