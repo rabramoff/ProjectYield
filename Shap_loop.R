@@ -1,47 +1,6 @@
 ######Shap loop#####
-######Load libraries#####
-library(mapdata)
-library(dplyr)
-library(ggplot2)
-library(ranger)
-library(raster)
-library(DALEX)
-source('multiplot.R')
-
-#####Switches#####
-same_locations = F
-crop_species = c("Maize","Rice","Wheat","Soybean")
-adaptation_types = F
-rcp45 = T
-do_shap = F
-
-######Load models and data#####
-load(file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_modrf_allTRUE.RData"))
-load(file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_trainingrf_allTRUE.RData"))
-mdatadir <- "/Users/rzabramoff/ownCloud/Collaborations/Makowski_yield/Data/"
-TAB_p<-read.csv(paste0(mdatadir,"tave_201120.csv"), header=T)
-TAB_p<-na.omit(TAB_p)
-
-#STOPPED HERE ADDING IN PRECIP
-#####Maps prep#####
-makelabelsEW <- function(x) {ifelse(x < 0, parse(text=paste0(x,"^o", "*W")), ifelse(x > 0, parse(text=paste0(x,"^o", "*E")),x))}
-makelabelsNS <- function(x) {ifelse(x < 0, parse(text=paste0(x,"^o", "*S")), ifelse(x > 0, parse(text=paste0(x,"^o", "*N")),x))}
-wrld <- map_data("world")
-xbreaks <- seq(-180,180,60)
-xlabels <- makelabelsEW(xbreaks)
-ybreaks <- seq(-90,90,30)
-ylabels <- makelabelsNS(ybreaks)
-gg1 <- ggplot() + 
-  geom_polygon(data = wrld, aes(x=long, y = lat, group = group), fill = "lightgray", color = "lightgray") + 
-  coord_fixed(1.3) + 
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        panel.background = element_blank(), axis.line = element_line(colour = "black"), axis.ticks = element_blank(), legend.position="bottom",legend.title=element_text(size=15), 
-        legend.text=element_text(size=12), axis.text = element_text(size=12))+
-  scale_x_continuous("", breaks = xbreaks, labels = xlabels) +
-  scale_y_continuous("", breaks = ybreaks, labels = ylabels, limits=c(-60,90))
-
 map_of_scenario <- function(Delta_temp_level, CO2.ppm_level, Adaptation_level, mod.rf.map){
-  NewData <- data.frame(Delta_temp=rep(Delta_temp_level, N),CO2.ppm=rep(CO2.ppm_level,N),Adaptation=rep(Adaptation_level,N),TempAvg=TAB_p_f$Tave, Latitude=TAB_p_f$y, Longitude=TAB_p_f$x)
+  NewData <- data.frame(Delta_temp=rep(2, N),CO2.ppm=rep(116,N),Adaptation=rep(AdaptLevel,N),TempAvg=TAB_in$Tave, Latitude=TAB_in$y, Longitude=TAB_in$x, Precip=TAB_in$Pr_avg, Delta_precip=TAB_in$PrChange)
   
   #Prediction RF
   Pred_rf<-predict(mod.rf.map,data=NewData)
@@ -63,6 +22,7 @@ map_of_scenario <- function(Delta_temp_level, CO2.ppm_level, Adaptation_level, m
     shap_TempAvg <- vector(length=dim(NewData)[1])
     shap_Delta_temp <- vector(length=dim(NewData)[1])
     shap_Adaptation <- vector(length=dim(NewData)[1])
+    shap_Precip <- vector(length=dim(NewData)[1])
     start.time <- Sys.time()
     for (m in 1:dim(NewData)[1]){
       shap_mean <- predict_parts(explainer = explain_rf, 
@@ -73,15 +33,17 @@ map_of_scenario <- function(Delta_temp_level, CO2.ppm_level, Adaptation_level, m
       shap_TempAvg[m] <- shap_mean[shap_mean$variable_name=="TempAvg",]$contribution[1]
       shap_Delta_temp[m] <- shap_mean[shap_mean$variable_name=="Delta_temp",]$contribution[1]
       shap_Adaptation[m] <- shap_mean[shap_mean$variable_name=="Adaptation",]$contribution[1]
+      shap_Precip[m] <- shap_mean[shap_mean$variable_name=="Precip",]$contribution[1]
     }
     end.time <- Sys.time()
     end.time-start.time
     
-    save(shap_co2ppm, file=paste0(crop_species[k], "_Nb",1,"_Adapt",i,"_shap_co2ppm_4.5.RData"))
-    save(shap_TempAvg, file=paste0(crop_species[k],"_Nb",1,"_Adapt",i,"_shap_TempAvg_4.5.RData"))
-    save(shap_Delta_temp, file=paste0(crop_species[k],"_Nb",1,"_Adapt",i,"_shap_Delta_temp_4.5.RData"))
-    save(shap_Adaptation, file=paste0(crop_species[k],"_Nb",1,"_Adapt",i,"_shap_Adaptation_4.5.RData"))
-
+    save(shap_co2ppm, file=paste0(outputdir,crop_species[k], "_Nb",1,"_Adapt",i,"_shap_co2ppm_4.5.RData"))
+    save(shap_TempAvg, file=paste0(outputdir,crop_species[k],"_Nb",1,"_Adapt",i,"_shap_TempAvg_4.5.RData"))
+    save(shap_Delta_temp, file=paste0(outputdir,crop_species[k],"_Nb",1,"_Adapt",i,"_shap_Delta_temp_4.5.RData"))
+    save(shap_Adaptation, file=paste0(outputdir,crop_species[k],"_Nb",1,"_Adapt",i,"_shap_Adaptation_4.5.RData"))
+    save(shap_Precip, file=paste0(outputdir,crop_species[k],"_Nb",1,"_Adapt",i,"_shap_Precip_4.5.RData"))
+    
     return("shaps done")
   }else{
     LAT<-seq(83.75,-55.75, by= -0.5)
@@ -119,6 +81,7 @@ if(rcp45){
   Delta_temp_levels = c(2,2)
   CO2.ppm_levels = c(116,116)
   Adaptation_levels = c(1,2)
+  #Delta_precip_levels = predict(mod.pr.change, )
 }else{
   Delta_temp_levels = rep(c(1.5, 2, 3), 4)
   CO2.ppm_levels = rep(c(rep(0,3), rep(210,3)),2)
@@ -136,9 +99,9 @@ for(k in 1:4){
   crop_species_map = crop_species[[k]]
   #Filter by cropping areas
   Area_crop<-read.csv(paste0(mdatadir,crop_species_map,"_country.csv"), header=T)
-  TAB_p_f<-right_join(Area_crop,TAB_p, by=c("x","y"))
-  TAB_p_f<-TAB_p_f[TAB_p_f$Total*TAB_p_f$Flag>0,]
-  N<-nrow(TAB_p_f)
+  TAB_in<-right_join(Area_crop,InputData, by=c("x","y"))
+  TAB_in<-TAB_in[TAB_in$Total*TAB_in$Flag>0,]
+  N<-nrow(TAB_in)
   
     mod.rf.map <- save.mod.rf[[1]][[k]]
     Training_map <- save.Training.rf[[1]][[k]]
@@ -223,7 +186,7 @@ plot_it <- function(mapNum, gglabel, crop_map) {gg1 + geom_tile(data=mapNum[mapN
 
 ###Plot####
 if(rcp45){
-    pdf(file=paste0("allcrops_rcp45",rcp45,".pdf"), height=6, width=9)
+    pdf(file=paste0(figoutdir,"allcrops_rcp45",rcp45,".pdf"), height=6, width=9)
     print(gg1 + geom_tile(data=map_summary, aes(x=x, y=y, fill=Mean_Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low="brown", mid="white", high="darkgreen", limits=c(-100,100), name="Yield Change (%)") + 
       ggtitle(paste0("RCP 4.5")) +
       facet_grid(Adaptation_level ~ Crop, labeller = labeller(Adaptation_level = adpt.labs)) +
@@ -245,12 +208,12 @@ if(rcp45){
     gg2 <- plot_it_noleg(map2, "2", crop_species[i])
     gg3 <- plot_it_noleg(map3, "3", crop_species[i])
     
-    pdf(file=paste0(crop_species[i],"_rcp45",rcp45,".pdf"), height=6, width=8)
+    pdf(file=paste0(figoutdir,crop_species[i],"_rcp45",rcp45,".pdf"), height=6, width=8)
     multiplot(gg1.5, gg3, gg2, cols=2)
     dev.off()
   }
   
-  pdf(file="legend.pdf", height=11, width=8)
+  pdf(file=paste0(figoutdir,"legend.pdf"), height=11, width=8)
   plot_it(map1.5, "1.5", "Maize")
   dev.off()
 }

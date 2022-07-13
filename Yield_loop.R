@@ -27,7 +27,7 @@ crop_species = c("Maize","Rice","Wheat","Soybean")
 adaptation_types = T
 do_iml = T
 Nb<-1
-run_all_mods = T
+run_all_mods = F
 train_on_all = T
 
 start <- Sys.time()
@@ -179,23 +179,22 @@ for (j in 1:Nb) {
   set.seed(j)
   
 #####Prep and Split Data#####
-  #STOPPED HERE ADDING IN PRECIP
 if(adaptation_types){
   if(same_locations){
     Loca<-paste(Longitude,Latitude, sep="_") 
-    DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,TempAvg,Precip,Delta_precip, y=Latitude, x=Longitude, Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others,Loca)
+    DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,TempAvg,Precip, y=Latitude, x=Longitude, Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others,Loca)
   } else {
-    DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,TempAvg,Precip,Delta_precip, y=Latitude, x=Longitude, Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others)
+    DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,TempAvg,Precip, y=Latitude, x=Longitude, Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others)
   }
-  DATA<-data.frame(Effect,Species,Delta_temp,CO2.ppm,TempAvg,Precip,Delta_precip, Latitude, Longitude,Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others)
+  DATA<-data.frame(Effect,Species,Delta_temp,CO2.ppm,TempAvg,Precip, Latitude, Longitude,Fertiliser,Irrigation,Cultivar,Soil_organic_matter_management,Planting_time,Tillage,Others)
 }else{
   if(same_locations){
     Loca<-paste(Longitude,Latitude, sep="_") 
-    DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg,Precip,Delta_precip, y=Latitude, x=Longitude, Loca)
+    DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg,Precip, y=Latitude, x=Longitude, Loca)
   } else {
-    DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg,Precip,Delta_precip, y=Latitude, x=Longitude)
+    DATA_lm<-data.frame(Ref,Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg,Precip, y=Latitude, x=Longitude)
   }
-  DATA<-data.frame(Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg,Precip,Delta_precip, Latitude, Longitude)
+  DATA<-data.frame(Effect,Species,Delta_temp,CO2.ppm,Adaptation,TempAvg,Precip, Latitude, Longitude)
 }
 
 df <- NULL
@@ -313,6 +312,7 @@ Pred_gbm_xy <- NULL
 R2_gbm_xy_int <- NULL
 R2_gbm_xy <- NULL
 for(i in 1:length(crop_species)){
+  set.seed(1234)
   mod.gbm.xy[[i]] <- do_GBM(Training_xy[[i]])
   #print(crop_species[[i]])
   #print(mod.gbm.xy[[i]])
@@ -326,7 +326,7 @@ for(i in 1:length(crop_species)){
   R2_gbm_xy[[i]] <- 1 - sum( (Testing_xy[[i]]$Effect-Pred_gbm_xy[[i]])^2 ) / sum( (Testing_xy[[i]]$Effect - mean(Testing_xy[[i]]$Effect))^2 )
   
 }
-}
+
 
 #####Climate RF#####
 mod.rf.0 <- NULL
@@ -339,6 +339,7 @@ Training_2_bis <- NULL
 Pred_rf_0 <- NULL
 for(i in 1:length(crop_species)){
   Training_0[[i]] <- Training_1[[i]][,-which(names(Training_1[[i]]) %in% c("Latitude","Longitude"))]
+  set.seed(1234)
   mod.rf.0[[i]] <- ranger(Effect~., data=Training_0[[i]], num.trees=1000)
   predictor.rf.0 <- Predictor$new(mod.rf.0[[i]], data = Training_0[[i]][-1], y = Training_0[[i]]$Effect, predict.fun = pfun)
   
@@ -350,30 +351,29 @@ for(i in 1:length(crop_species)){
   X0<- predict(mod.rf.0[[i]], data=Training_1[[i]])$predictions
   Training_2_bis[[i]]<-cbind(Training_2[[i]],X0)
   
-  if(do_iml){
-    imp <- FeatureImp$new(predictor.rf.0, loss = "mae")
-    
-    #strength of interactions
-    interact <- Interaction$new(predictor.rf.0)
-
-    #feature effects
-    effs <- FeatureEffects$new(predictor.rf.0, method="pdp")
-    #ales <- FeatureEffects$new(predictor.rf.0, method="ale")
-    # make_effect_plots(effs,"PDPs")
-    # make_effect_plots(ales,"ALEs")
-  
-  if(i==1|i==4){
-    bestPred[[i]] <- as.data.frame(cbind(Pred_rf_0[[i]], Testing_1[[i]]$Effect, rep(crop_species[i], length(Pred_rf_0[[i]])), row.names(Testing_1[[i]])))
-    bestPred[[i]][,1] <- as.numeric(bestPred[[i]][,1])
-    bestPred[[i]][,2] <- as.numeric(bestPred[[i]][,2])
-    names(bestPred[[i]]) <- c("Predicted", "Observed", "Crop", "Site")
-    bestEffs[[i]] <- effs
-  }
-  }
+  # if(do_iml){
+  #   imp <- FeatureImp$new(predictor.rf.0, loss = "mae")
+  #   
+  #   #strength of interactions
+  #   interact <- Interaction$new(predictor.rf.0)
+  # 
+  #   #feature effects
+  #   effs <- FeatureEffects$new(predictor.rf.0, method="pdp")
+  #   #ales <- FeatureEffects$new(predictor.rf.0, method="ale")
+  #   # make_effect_plots(effs,"PDPs")
+  #   # make_effect_plots(ales,"ALEs")
+  # 
+  # if(i==1|i==4){
+  #   bestPred[[i]] <- as.data.frame(cbind(Pred_rf_0[[i]], Testing_1[[i]]$Effect, rep(crop_species[i], length(Pred_rf_0[[i]])), row.names(Testing_1[[i]])))
+  #   bestPred[[i]][,1] <- as.numeric(bestPred[[i]][,1])
+  #   bestPred[[i]][,2] <- as.numeric(bestPred[[i]][,2])
+  #   names(bestPred[[i]]) <- c("Predicted", "Observed", "Crop", "Site")
+  #   bestEffs[[i]] <- effs
+  # }
+  # }
   
 }
 
-if(run_all_mods){
 ####Climate GBM#####
 mod.gbm.0 <- NULL
 Pred_gbm_0 <- NULL
@@ -381,6 +381,7 @@ RMSEP_gbm_0 <- NULL
 R2_gbm_0_int <- NULL
 R2_gbm_0 <- NULL
 for(i in 1:length(crop_species)){
+  set.seed(1234)
   mod.gbm.0[[i]] <- do_GBM(Training_0[[i]])
   
   predictor.gbm.0 <- Predictor$new(mod.gbm.0[[i]], data = Training_0[[i]][-1], y = Training_0[[i]]$Effect)
@@ -423,13 +424,13 @@ for(i in 1:length(crop_species)){
     effs <- FeatureEffects$new(predictor.rf.1, method="pdp")
     #ales <- FeatureEffects$new(predictor.rf.0, method="ale")
   
-  if(i==2|i==3){
+#  if(i==2|i==3){
     bestPred[[i]] <- as.data.frame(cbind(Pred_rf_1[[i]], Testing_1[[i]]$Effect, rep(crop_species[i], length(Pred_rf_1[[i]])), row.names(Testing_1[[i]])))
     bestPred[[i]][,1] <- as.numeric(bestPred[[i]][,1])
     bestPred[[i]][,2] <- as.numeric(bestPred[[i]][,2])
     names(bestPred[[i]]) <- c("Predicted", "Observed", "Crop", "Site")
     bestEffs[[i]] <- effs
-  }
+#  }
   }
   
 }
@@ -442,6 +443,7 @@ Pred_gbm_1 <- NULL
 R2_gbm_1_int <- NULL
 R2_gbm_1 <- NULL
 for(i in 1:length(crop_species)){
+  set.seed(1234)
   mod.gbm.1[[i]] <- do_GBM(Training_1[[i]])
 
   predictor.gbm.1 <- Predictor$new(mod.gbm.1[[i]], data = Training_1[[i]][-1], y = Training_1[[i]]$Effect)
@@ -463,36 +465,36 @@ for(i in 1:length(crop_species)){
   if(adaptation_types){
     if(same_locations){
       if(i==1){
-        mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting_time+(1|Loca), data=Training_2[[i]])
+        mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting_time+(1|Loca), data=Training_2[[i]])
       }
       if(i==2){
-        mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Fertiliser+Cultivar+Planting_time+Others+(1|Loca), data=Training_2[[i]])
+        mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+CO2.ppm+Fertiliser+Cultivar+Planting_time+Others+(1|Loca), data=Training_2[[i]])
       }
       if(i==3){
-        mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting_time+Others+(1|Loca), data=Training_2[[i]])
+        mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting_time+Others+(1|Loca), data=Training_2[[i]])
       }
       if(i==4){
-        mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Fertiliser+Cultivar+Planting_time+(1|Loca), data=Training_2[[i]])
+        mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+CO2.ppm+Fertiliser+Cultivar+Planting_time+(1|Loca), data=Training_2[[i]])
       }
     } else {
       if(i==1){
-        mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting_time+(1|Ref), data=Training_2[[i]])
+        mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting_time+(1|Ref), data=Training_2[[i]])
       }
       if(i==2){
-        mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Fertiliser+Cultivar+Planting_time+Others+(1|Ref), data=Training_2[[i]])
+        mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+CO2.ppm+Fertiliser+Cultivar+Planting_time+Others+(1|Ref), data=Training_2[[i]])
       }
       if(i==3){
-        mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting_time+Others+(1|Ref), data=Training_2[[i]])
+        mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting_time+Others+(1|Ref), data=Training_2[[i]])
       }
       if(i==4){
-        mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Fertiliser+Cultivar+Planting_time+(1|Ref), data=Training_2[[i]])
+        mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+CO2.ppm+Fertiliser+Cultivar+Planting_time+(1|Ref), data=Training_2[[i]])
       }
     }
   }else{
     if(same_locations){
-      mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+Adaptation+CO2.ppm+(1|Loca), data=Training_2[[i]])
+      mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Adaptation+CO2.ppm+(1|Loca), data=Training_2[[i]])
     } else {
-      mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+Adaptation+CO2.ppm+(1|Ref), data=Training_2[[i]])
+      mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Adaptation+CO2.ppm+(1|Ref), data=Training_2[[i]])
     }
   }
   
@@ -519,38 +521,38 @@ for(i in 1:length(crop_species)){
   if(adaptation_types){
     if(same_locations){
       if(i==1){
-        mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Irrigation+Fertiliser+Cultivar+Planting_time)+(1|Loca), data=Training_2[[i]])
+        mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*CO2.ppm*(Irrigation+Fertiliser+Cultivar+Planting_time)+(1|Loca), data=Training_2[[i]])
       }
       if(i==2){
-        mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Fertiliser+Cultivar+Planting_time+Others)+(1|Loca), data=Training_2[[i]])
+        mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*CO2.ppm*(Fertiliser+Cultivar+Planting_time+Others)+(1|Loca), data=Training_2[[i]])
       }
       if(i==3){
-        mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Irrigation+Fertiliser+Cultivar+Planting_time+Others)+(1|Loca), data=Training_2[[i]])
+        mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*CO2.ppm*(Irrigation+Fertiliser+Cultivar+Planting_time+Others)+(1|Loca), data=Training_2[[i]])
       }
       if(i==4){
-        mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Fertiliser+Cultivar+Planting_time)+(1|Loca), data=Training_2[[i]])
+        mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*CO2.ppm*(Fertiliser+Cultivar+Planting_time)+(1|Loca), data=Training_2[[i]])
       }
     } else {
       if(i==1){
-        mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Irrigation+Fertiliser+Cultivar+Planting_time)+(1|Ref), data=Training_2[[i]])
+        mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*CO2.ppm*(Irrigation+Fertiliser+Cultivar+Planting_time)+(1|Ref), data=Training_2[[i]])
       }
       if(i==2){
-        mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Fertiliser+Cultivar+Planting_time+Others)+(1|Ref), data=Training_2[[i]])
+        mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*CO2.ppm*(Fertiliser+Cultivar+Planting_time+Others)+(1|Ref), data=Training_2[[i]])
       }
       if(i==3){
-        mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Irrigation+Fertiliser+Cultivar+Planting_time+Others)+(1|Ref), data=Training_2[[i]])
+        mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*CO2.ppm*(Irrigation+Fertiliser+Cultivar+Planting_time+Others)+(1|Ref), data=Training_2[[i]])
       }
       if(i==4){
-        mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Fertiliser+Cultivar+Planting_time)+(1|Ref), data=Training_2[[i]])
+        mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*CO2.ppm*(Fertiliser+Cultivar+Planting_time)+(1|Ref), data=Training_2[[i]])
       }
     }
   }else{  
     
     if(same_locations){
-      mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*Precip*Delta_precip*CO2.ppm*Adaptation*TempAvg+(1|Loca), data=Training_2[[i]])
+      mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*Precip*CO2.ppm*Adaptation*TempAvg+(1|Loca), data=Training_2[[i]])
     } else {
       #mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*CO2.ppm + Delta_temp*Adaptation + Delta_temp*TempAvg+Adaptation+CO2.ppm+(1|Ref), data=Training_2[[i]])
-      mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*Precip*Delta_precip*CO2.ppm*Adaptation*TempAvg+(1|Ref), data=Training_2[[i]])
+      mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*Precip*CO2.ppm*Adaptation*TempAvg+(1|Ref), data=Training_2[[i]])
     }
   }
   
@@ -588,19 +590,19 @@ for(i in 1:length(crop_species)){
   
   if(adaptation_types){
     if(i==1){
-      mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting_time+Matern(1|x+y), data=Training_2[[i]])
+      mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting_time+Matern(1|x+y), data=Training_2[[i]])
     }
     if(i==2){
-      mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Fertiliser+Cultivar+Planting_time+Others+Matern(1|x+y), data=Training_2[[i]])
+      mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Precip+CO2.ppm+Fertiliser+Cultivar+Planting_time+Others+Matern(1|x+y), data=Training_2[[i]])
     }
     if(i==3){
-      mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting_time+Others+Matern(1|x+y), data=Training_2[[i]])
+      mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting_time+Others+Matern(1|x+y), data=Training_2[[i]])
     }
     if(i==4){
-      mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Fertiliser+Cultivar+Matern(1|x+y), data=Training_2[[i]]) #For some reason planting time doesn't work here so removed
+      mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Precip+CO2.ppm+Fertiliser+Cultivar+Matern(1|x+y), data=Training_2[[i]]) #For some reason planting time doesn't work here so removed
     }
   }else{
-    mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+Adaptation+CO2.ppm+Matern(1|x+y), data=Training_2[[i]])
+    mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Precip+Adaptation+CO2.ppm+Matern(1|x+y), data=Training_2[[i]])
   }
   
   Pred_spa_lm[[i]]<-predict(mod_spa_lm[[i]], newdata=Testing_2[[i]])
@@ -626,13 +628,13 @@ for(i in 1:length(crop_species)){
 
 }
 #####End Training and Testing#####
-  ##WORKING - issue with putting them all together for adaptation types T, but not with running it
 for(i in 1:length(crop_species)){  
 
   if(run_all_mods){
   RMSEP_rf_xy_vec[j,i]<-RMSEP_rf_xy[[i]]
-  }
+  #}
   RMSEP_rf_0_vec[j,i]<-RMSEP_rf_0[[i]]
+  }
   RMSEP_rf_1_vec[j,i]<-RMSEP_rf_1[[i]]
   if(run_all_mods){
   RMSEP_gbm_xy_vec[j,i]<-RMSEP_gbm_xy[[i]]
@@ -647,8 +649,9 @@ for(i in 1:length(crop_species)){
 
   if(run_all_mods){
   R2_rf_xy_vec[j,i]<-R2_rf_xy[[i]]
-  }
+  #}
   R2_rf_0_vec[j,i]<-R2_rf_0[[i]]
+  }
   R2_rf_1_vec[j,i]<-R2_rf_1[[i]]
   if(run_all_mods){
   R2_gbm_xy_vec[j,i]<-R2_gbm_xy[[i]]
@@ -663,11 +666,12 @@ for(i in 1:length(crop_species)){
 }
 
 ObsPred[[j]] <- rbind(bestPred[[1]], bestPred[[2]], bestPred[[3]], bestPred[[4]])
+
 if(do_iml){
 PDPeffs[[j]] <- list(bestEffs[[1]], bestEffs[[2]], bestEffs[[3]], bestEffs[[4]])
 }
-save.mod.rf[[j]] <- list(mod.rf.0[[1]], mod.rf.1[[2]], mod.rf.1[[3]], mod.rf.0[[4]]) 
-save.Training.rf[[j]] <- list(Training_0[[1]], Training_1[[2]], Training_1[[3]], Training_0[[4]])
+save.mod.rf[[j]] <- list(mod.rf.1[[1]], mod.rf.1[[2]], mod.rf.1[[3]], mod.rf.1[[4]]) 
+save.Training.rf[[j]] <- list(Training_1[[1]], Training_1[[2]], Training_1[[3]], Training_1[[4]])
 }
 
 RESULT <- NULL
@@ -679,8 +683,7 @@ NAME<-c("RF long lat","GBM long lat",
         "Linear model climate + interactions",
         "Spatial linear model","Spatial linear model + climate","Spatial linear model + RF outputs")
 }else{
-  NAME<-c("RF climate",
-          "RF climate + long lat") 
+  NAME<-c("RF climate + long lat") 
 }
 for(i in 1:length(crop_species)){
 
@@ -738,19 +741,19 @@ for(i in 1:length(crop_species)){
     sd(R2_spa_rf_vec[,i])/sqrt(Nb))
   }else{
     RMSEP_MEAN <- c(
-      mean(RMSEP_rf_0_vec[,i]),
+      #mean(RMSEP_rf_0_vec[,i]),
       mean(RMSEP_rf_1_vec[,i]))
     
     RMSEP_SE<-c(
-      sd(RMSEP_rf_0_vec[,i])/sqrt(Nb),
+      #sd(RMSEP_rf_0_vec[,i])/sqrt(Nb),
       sd(RMSEP_rf_1_vec[,i])/sqrt(Nb))
     
     R2_MEAN <- c(
-      mean(R2_rf_0_vec[,i]),
+      #mean(R2_rf_0_vec[,i]),
       mean(R2_rf_1_vec[,i]))
     
     R2_SE<-c(
-      sd(R2_rf_0_vec[,i])/sqrt(Nb),
+      #sd(R2_rf_0_vec[,i])/sqrt(Nb),
       sd(R2_rf_1_vec[,i])/sqrt(Nb))
   }
   
@@ -762,15 +765,16 @@ for(i in 1:length(crop_species)){
 }
 
 RESULT_ALL <- rbind(RESULT[[1]], RESULT[[2]],RESULT[[3]], RESULT[[4]])
-write.csv(file=paste0("samelocs",same_locations,"_adaptationtypes",adaptation_types,"_stats_loop_all",train_on_all,".csv"),RESULT_ALL)
-save.image(file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_loop_all",train_on_all,".RData"))
-save(ObsPred, file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_store_predictions_all",train_on_all,".RData"))
+outputdir="/Users/rzabramoff/ownCloud/Collaborations/Makowski_yield/Output/Rdata/AddPrecipOnly/"
+write.csv(file=paste0(outputdir,"samelocs",same_locations,"_adaptationtypes",adaptation_types,"_stats_loop_all",train_on_all,".csv"),RESULT_ALL)
+save.image(file=paste0(outputdir,"saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_loop_all",train_on_all,".RData"))
+save(ObsPred, file=paste0(outputdir,"saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_store_predictions_all",train_on_all,".RData"))
 if(do_iml){
-save(PDPeffs, file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_store_PDPs_all",train_on_all,".RData"))
+save(PDPeffs, file=paste0(outputdir,"saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_store_PDPs_all",train_on_all,".RData"))
 #PDPeffs[[Nb 1-10]][[Crop 1-4]]
 }
-save(save.mod.rf, file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_modrf_all",train_on_all,".RData"))
-save(save.Training.rf,file=paste0("saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_trainingrf_all",train_on_all,".RData"))
+save(save.mod.rf, file=paste0(outputdir,"saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_modrf_all",train_on_all,".RData"))
+save(save.Training.rf,file=paste0(outputdir,"saved_MLs_samelocs",same_locations,"_adaptationtypes",adaptation_types,"_trainingrf_all",train_on_all,".RData"))
 
 end <- Sys.time()
 end - start
