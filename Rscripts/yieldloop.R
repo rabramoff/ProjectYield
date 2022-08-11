@@ -307,6 +307,10 @@ for (j in 1:Nb) {
         #feature effects
         effs <- FeatureEffects$new(predictor.gbm.0, method="pdp")
         
+        #library(yaImpute)
+        #twoway <- FeatureEffect$new(predictor.gbm.0, feature = c("Delta_temp", "Adaptation"), method="pdp")
+        #plot(twoway)
+        
        if(i==1){
           bestEffs[[i]] <- effs
        }

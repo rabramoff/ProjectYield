@@ -21,8 +21,8 @@ makebaseplot <- function(){
 
 map_of_df <- function(DATA){
   gg1 <- makebaseplot()
-  gg1 + geom_point(data=DATA, aes(x=Longitude, y=Latitude, color=Effect), pch=16, size=1) + scale_color_gradient2(midpoint=0, low="#440154FF", mid="#21908CFF", high="#FDE725FF", limits=c(-100,140), breaks=c(-100,0,100)) +
-    labs(color="Yield Change (%)") +
+  gg1 + geom_point(data=DATA, aes(x=Longitude, y=Latitude, color=Effect), pch=16, size=1) + scale_color_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, limits=c(-100,140), breaks=c(-100,0,100)) + 
+   labs(color="Yield Change (%)") +
     facet_wrap(~Crop)
 }
 
