@@ -155,6 +155,18 @@ start <- Sys.time()
 loop_func(same_locations, adaptation_types, do_iml, Nb, run_all_mods, train_on_all)
 end <- Sys.time()
 end-start
+
+#Make 2 way adapt plot
+same_locations = F
+adaptation_types = F
+do_iml = T
+Nb = 1
+run_all_mods = F
+train_on_all = T
+start <- Sys.time()
+loop_func(same_locations, adaptation_types, do_iml, Nb, run_all_mods, train_on_all)
+end <- Sys.time()
+end-start
 ```
 
 ##Make Plots
@@ -332,6 +344,36 @@ pdf(file=paste0(figoutdir,"adaptation",adaptation_types,"_PDPs_legend.pdf"), hei
     p7
 dev.off()
 ```
+
+#### Make PDP 2 way plots
+```{r}
+same_locations = F
+adaptation_types = F
+do_iml = T
+Nb = 1
+run_all_mods = F
+train_on_all = T
+fileprefix <- paste0(outputdir,"sameLocs",same_locations,"_adaptationTypes",adaptation_types,"_doIML",do_iml,"_Nb",Nb,"runAllMods",run_all_mods,"_trainOnAll",train_on_all)
+load(paste0(fileprefix,"_store_bestML_PDP2way.Rdata"))
+
+PDP2way[[1]][[1]]$results$Crop <- rep("Maize",dim(PDP2way[[1]][[1]]$results)[1])
+PDP2way[[1]][[2]]$results$Crop <- rep("Rice",dim(PDP2way[[1]][[2]]$results)[1])
+PDP2way[[1]][[3]]$results$Crop <- rep("Wheat",dim(PDP2way[[1]][[3]]$results)[1])
+PDP2way[[1]][[4]]$results$Crop <- rep("Soybean",dim(PDP2way[[1]][[4]]$results)[1])
+
+bigpdp2 <- rbind(PDP2way[[1]][[1]]$results, PDP2way[[1]][[2]]$results, PDP2way[[1]][[3]]$results, PDP2way[[1]][[4]]$results)
+bigpdp <- bigpdp2 %>% dplyr::select(-c(.type)) %>% pivot_wider(id_cols=c(Crop,Delta_temp), names_from = Adaptation, values_from = .value) %>% mutate(Difference = Yes-No) %>% dplyr::select(-c(No, Yes))
+
+pdf(file=paste0(figoutdir,"PDP2way.pdf"), height=3, width=5)
+      ggplot(bigpdp, aes(Delta_temp, Difference, color= Crop)) + geom_line(lwd=2) +
+        ylab("Increase in Yield (%) with Adaptation") +
+        xlab(expression(Delta~"Temperature"~degree~"C")) + 
+        theme_bw() + theme(legend.position = "none") +
+        scale_color_manual(values = c(cbPalette[1], cbPalette[2], cbPalette[3], cbPalette[4])) + 
+        guides(colour = guide_legend(override.aes = list(size=5)))
+dev.off()
+```
+
 
 #Shap loop
 ##Set switches and read data
@@ -698,7 +740,7 @@ map_change$Adaptation_f <- factor(map_change$Adaptation, levels=c("No","Yes","Ch
 
 ###Plot####
     pdf(file=paste0(figoutdir,"allcrops_rcp45",rcp45,".pdf"), height=6, width=9)
-    print(gg1 + geom_tile(data=map_df_all, aes(x=Longitude, y=Latitude, fill=Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, limits=c(-100,100), name="Yield Change (%)") + 
+    print(gg1 + geom_tile(data=map_df_all, aes(x=Longitude, y=Latitude, fill=Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, limits=c(summary(map_df_all$Effect)[1],summary(map_df_all$Effect)[6]), name="Yield Change (%)") + 
       ggtitle(paste0("RCP 4.5")) +
       facet_grid(Adaptation ~ Crop, labeller = labeller(Adaptation = adpt.labs)) +
       theme(#text=element_text(size=8), #change font size of all text
@@ -711,7 +753,7 @@ map_change$Adaptation_f <- factor(map_change$Adaptation, levels=c("No","Yes","Ch
     dev.off()
     
     pdf(file=paste0(figoutdir,"allcrops_rcp45",rcp45,"_change.pdf"), height=6, width=9)
-    print(gg1 + geom_tile(data=map_change, aes(x=Longitude, y=Latitude, fill=Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, limits=c(-100,100), name="Yield Change (%)") + 
+    print(gg1 + geom_tile(data=map_change, aes(x=Longitude, y=Latitude, fill=Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, limits=c(summary(map_change$Effect)[1],summary(map_change$Effect)[6]), name="Yield Change (%)") + 
       ggtitle(paste0("RCP 4.5")) +
       facet_grid(Adaptation_f ~ Crop, labeller = labeller(Adaptation_f = adpt.labs.change)) +
       theme(#text=element_text(size=8), #change font size of all text
@@ -733,8 +775,7 @@ map_change$Adaptation_f <- factor(map_change$Adaptation, levels=c("No","Yes","Ch
       dev.off()
 ```
 
-# Formatted Fig3plot
-## Load shapmaps and summaries
+# Load shapmaps and summaries
 ```{r}
 load(paste0(outputdir,"1_ShapdfMap.RData"))
 adpt1shap <- shap_df_map
@@ -774,7 +815,7 @@ summary(adpt1shap[adpt1shap$Crop=="Soybean",]$TempAvg)
 summary(adpt2shap[adpt2shap$Crop=="Soybean",]$TempAvg)
 ```
 
-##Merge and plot
+##Merge and check
 ```{r}
 adptshap <- rbind(adpt1shap, adpt2shap)
 
@@ -803,7 +844,7 @@ shap_df_all2 <- adpt2shap %>% dplyr::select(Delta_precip, Precip, TempAvg, Delta
                   ylab("Shapley Value") +
                   facet_wrap(Crop ~ ., nrow=2) + xlab("") +
                    scale_x_discrete(breaks=c("Adaptation", "co2ppm", "Delta_precip", "Delta_temp", "Precip", "TempAvg"), labels=c("No Adaptation", expression(Delta~"CO"[2]), expression(Delta~"Precip"), expression(Delta~"Temp"), expression("Avg Precip"), expression("Avg Temp"))) +
-                  theme(axis.text.x = element_text(angle = 45, vjust = 0, hjust=0)))
+                  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5)))
     dev.off()
     
     pdf(file=paste0(figoutdir,"shap_box_Adapt2.pdf"), height=4, width=6)
@@ -814,7 +855,7 @@ shap_df_all2 <- adpt2shap %>% dplyr::select(Delta_precip, Precip, TempAvg, Delta
                   ylab("Shapley Value") +
                   facet_wrap(Crop ~ ., nrow=2) + xlab("") +
                     scale_x_discrete(breaks=c("Adaptation", "co2ppm", "Delta_precip","Delta_temp", "Precip", "TempAvg"), labels=c("Adaptation", expression(Delta~"CO"[2]), expression(Delta~"Precip"), expression(Delta~"Temp"), expression("Avg Precip"), expression("Avg Temp"))) +
-                  theme(axis.text.x = element_text(angle = 45, vjust = 0, hjust=0)))
+                  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5)))
     dev.off()
 ```
 

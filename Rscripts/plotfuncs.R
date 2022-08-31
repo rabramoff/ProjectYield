@@ -47,7 +47,7 @@ obs_v_pred <- function(ObsPred){
   #mean and se of Observed is redundant, since those don't change over iterations
 
   ggplot(FormOP, aes(x=mean.Observed, y=mean.Predicted)) +
-    geom_point() +
+    geom_point(size=0.5) +
     geom_errorbar(aes(ymin=mean.Predicted-se.Predicted, ymax=mean.Predicted+se.Predicted), width=.2,
                   position=position_dodge(0.05)) +
     ylab("Predicted Yield Change (%)") +

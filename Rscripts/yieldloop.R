@@ -58,10 +58,12 @@ AIC_spa_rf_vec<-matrix(nrow=Nb,ncol=4)
 
 ObsPred <- NULL
 PDPeffs <- NULL
+PDP2way <- NULL
 save.mod.rf <- NULL
 save.Training.rf <- NULL
 bestPred <- NULL
 bestEffs <- NULL
+best2way <- NULL
 
 for (j in 1:Nb) {
   print(j)
@@ -307,12 +309,11 @@ for (j in 1:Nb) {
         #feature effects
         effs <- FeatureEffects$new(predictor.gbm.0, method="pdp")
         
-        #library(yaImpute)
-        #twoway <- FeatureEffect$new(predictor.gbm.0, feature = c("Delta_temp", "Adaptation"), method="pdp")
-        #plot(twoway)
+        twoway <- FeatureEffect$new(predictor.gbm.0, feature = c("Delta_temp", "Adaptation"), method="pdp")
         
        if(i==1){
           bestEffs[[i]] <- effs
+          best2way[[i]] <- twoway
        }
       }
     
@@ -357,8 +358,11 @@ for (j in 1:Nb) {
       #feature effects
       effs <- FeatureEffects$new(predictor.rf.1, method="pdp")
       
+      twoway <- FeatureEffect$new(predictor.rf.1, feature = c("Delta_temp", "Adaptation"), method="pdp")
+      
     if(i==2|i==4){
       bestEffs[[i]] <- effs
+      best2way[[i]] <- twoway
     }
     }
 
@@ -399,8 +403,11 @@ for (j in 1:Nb) {
         #feature effects
         effs <- FeatureEffects$new(predictor.gbm.1, method="pdp")
         
+        twoway <- FeatureEffect$new(predictor.gbm.1, feature = c("Delta_temp", "Adaptation"), method="pdp")
+        
         if(i==3){  
           bestEffs[[i]] <- effs
+          best2way[[i]] <- twoway
         }
       }  
       
@@ -449,6 +456,7 @@ for (j in 1:Nb) {
           mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+Adaptation+CO2.ppm+(1|Loca), data=Training_2[[i]])
         } else {
           mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+Adaptation+CO2.ppm+(1|Ref.No), data=Training_2[[i]])
+          #anova(lme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+Adaptation+CO2.ppm, random=~1|Ref.No, data=Training_2[[i]]))
         }
       }
       
@@ -637,10 +645,11 @@ for (j in 1:Nb) {
   }
   
   ObsPred[[j]] <- rbind(bestPred[[1]], bestPred[[2]], bestPred[[3]], bestPred[[4]])
-  print(ObsPred)
+  #print(ObsPred)
   
   if(do_iml){
     PDPeffs[[j]] <- list(bestEffs[[1]], bestEffs[[2]], bestEffs[[3]], bestEffs[[4]])
+    PDP2way[[j]] <- list(best2way[[1]], best2way[[2]], best2way[[3]], best2way[[4]])
   }
   save.mod.rf[[j]] <- list(mod.gbm.0[[1]], mod.rf.1[[2]], mod.gbm.1[[3]], mod.rf.1[[4]]) 
   save.Training.rf[[j]] <- list(Training_0[[1]], Training_1[[2]], Training_1[[3]], Training_1[[4]])
@@ -655,7 +664,7 @@ if(run_all_mods){
           "Linear model climate + interactions",
           "Spatial linear model","Spatial linear model + climate","Spatial linear model + RF outputs")
 }else{
-  NAME<-c("GBM climate","RF climate + long lat","GBM climate + long lat","RF climate + long lat") 
+  NAME<-c("GBM climate","RF climate + long lat","GBM climate + long lat") 
 }
 for(i in 1:length(crop_species)){
   
@@ -739,8 +748,8 @@ for(i in 1:length(crop_species)){
       sd(AIC_spa_rf_vec[,i])/sqrt(Nb))
   }else{
     RMSEP_MEAN <- c(
-      mean(RMSEP_rf_1_vec[,i]),
       mean(RMSEP_gbm_0_vec[,i]),
+      mean(RMSEP_rf_1_vec[,i]),
       mean(RMSEP_gbm_1_vec[,i]))
     
     RMSEP_SE<-c(
@@ -771,6 +780,12 @@ for(i in 1:length(crop_species)){
   
   crop_species_col <- rep(crop_species[[i]], length(R2_MEAN))
   
+  ###TEMP
+  print(paste("NAME",NAME))
+  print(paste("RMSEP_MEAN",RMSEP_MEAN))
+  print(paste("crop_species_col",crop_species_col))
+  ###TEMP
+  
   RESULT[[i]]<-data.frame(NAME,RMSEP_MEAN, RMSEP_SE, R2_MEAN, R2_SE, AIC_MEAN, AIC_SE, crop_species_col)
   print(crop_species[[i]])
   print(RESULT[[i]])
@@ -788,6 +803,7 @@ write.csv(file=paste0(fileprefix,"_results.csv"),RESULT_ALL)
 save(ObsPred, file=paste0(fileprefix,"_store_bestML_predictions.RData"))
 if(do_iml){
   save(PDPeffs, file=paste0(fileprefix,"_store_bestML_PDPs.RData"))
+  save(PDP2way, file=paste0(fileprefix,"_store_bestML_PDP2way.RData"))
   #PDPeffs[[Nb 1-10]][[Crop 1-4]]
 }
 save(save.mod.rf, file=paste0(fileprefix,"_saved_bestMLs.RData"))
