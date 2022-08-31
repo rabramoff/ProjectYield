@@ -397,6 +397,8 @@ train_on_all = T
 fileprefix <- paste0(outputdir,"sameLocs",same_locations,"_adaptationTypes",adaptation_types,"_doIML",do_iml,"_Nb",Nb,"runAllMods",run_all_mods,"_trainOnAll",train_on_all)
 load(paste0(fileprefix,"_saved_modOutLm.Rdata"))
 load(paste0(fileprefix,"_saved_modOutLmInts.Rdata"))
+load(paste0(fileprefix,"_saved_modLm.Rdata"))
+load(paste0(fileprefix,"_saved_modLmInts.Rdata"))
 
 save.mod.out.lm[[1]][[1]]
 save.mod.out.lm[[1]][[2]]
@@ -407,6 +409,14 @@ save.mod.out.lm.ints[[1]][[1]]
 save.mod.out.lm.ints[[1]][[2]]
 save.mod.out.lm.ints[[1]][[3]]
 save.mod.out.lm.ints[[1]][[4]]
+
+save.mod.lm[[1]]
+save.mod.lm.ints[[1]]
+
+summary(save.mod.lm[[1]][[1]])
+summary(save.mod.lm[[1]][[2]])
+summary(save.mod.lm[[1]][[3]])
+summary(save.mod.lm[[1]][[4]])
 ```
 
 

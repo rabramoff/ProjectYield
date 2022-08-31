@@ -61,6 +61,8 @@ PDPeffs <- NULL
 PDP2way <- NULL
 save.mod.rf <- NULL
 save.Training.rf <- NULL
+save.mod.lm <- NULL
+save.mod.lm.ints <- NULL
 save.mod.out.lm <- NULL
 save.mod.out.lm.ints <- NULL
 bestPred <- NULL
@@ -677,6 +679,8 @@ for (j in 1:Nb) {
   save.mod.rf[[j]] <- list(mod.gbm.0[[1]], mod.rf.1[[2]], mod.gbm.1[[3]], mod.rf.1[[4]]) 
   save.Training.rf[[j]] <- list(Training_0[[1]], Training_1[[2]], Training_1[[3]], Training_1[[4]])
   if(run_all_mods){
+  save.mod.lm[[j]] <- list(mod_lm[[1]], mod_lm[[2]], mod_lm[[3]], mod_lm[[4]])
+  save.mod.lm.ints[[j]] <- list(mod_lm_ints[[1]], mod_lm_ints[[2]], mod_lm_ints[[3]], mod_lm_ints[[4]])
   save.mod.out.lm[[j]] <- list(out_lm[[1]], out_lm[[2]], out_lm[[3]], out_lm[[4]])
   save.mod.out.lm.ints[[j]] <- list(out_lm_ints[[1]], out_lm_ints[[2]], out_lm_ints[[3]], out_lm_ints[[4]])
   }
@@ -837,6 +841,8 @@ save(save.mod.rf, file=paste0(fileprefix,"_saved_bestMLs.RData"))
 save(save.Training.rf,file=paste0(fileprefix,"_saved_trainingData.RData"))
 
 if(run_all_mods){
+save(save.mod.lm,file=paste0(fileprefix,"_saved_modLm.RData"))
+save(save.mod.lm.ints,file=paste0(fileprefix,"_saved_modLmInts.RData"))
 save(save.mod.out.lm,file=paste0(fileprefix,"_saved_modOutLm.RData"))
 save(save.mod.out.lm.ints,file=paste0(fileprefix,"_saved_modOutLmInts.RData"))
 }
