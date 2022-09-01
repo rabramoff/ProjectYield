@@ -45,7 +45,7 @@ highcolor = "#FDE725FF"
 
 #Data import
 ```{r data-import}
-rootdir <- "/Users/r4y/Dropbox (ORNL)/Collaborations/Makowski_yield"
+rootdir <- "/Users/r4y/Dropbox (ORNL)/Collaborations/ProjectYield"
 outputdir= paste0(rootdir,"/Output/Rdata/")
 figoutdir= paste0(rootdir,"/Output/Figures/")
 crop_species = c("Maize","Rice","Wheat","Soybean")
