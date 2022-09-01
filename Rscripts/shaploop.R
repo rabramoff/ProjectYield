@@ -30,7 +30,6 @@ do_shaps <- function(Delta_temp_level, CO2.ppm_level, Adaptation_level, mod.rf.m
   }
   
     NewData$Effect <- Pred
-    #NewData <- NewData[,-c(7)]
     if (k==1){
       NewData$Latitude <- TAB_in$Latitude
       NewData$Longitude <- TAB_in$Longitude

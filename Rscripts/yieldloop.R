@@ -129,7 +129,7 @@ for (j in 1:Nb) {
     df[[i]]<-df[[i]][ , -which(names(df[[i]]) %in% c("Crop"))]
     df_lm[[i]]<-df_lm[[i]][ , -which(names(df_lm[[i]]) %in% c("Crop"))]
     
-    #Remove where N<24 (instance of N=23 removed)
+    #Remove where N<24 (one instance of N=23 removed)
     if(adaptation_types){
       df[[i]]<-df[[i]][ , -which(names(df[[i]]) %in% c("Tillage","Soil.organic.matter.management"))]
       df_lm[[i]]<-df_lm[[i]][ , -which(names(df_lm[[i]]) %in% c("Tillage","Soil.organic.matter.management"))]
@@ -159,7 +159,6 @@ for (j in 1:Nb) {
     #Only x and y
     df_xy[[i]]<-df[[i]][ , which(names(df[[i]]) %in% c("Effect","Latitude","Longitude"))]
     
-    #set.seed(123)
     Loc<-paste(df[[i]]$Longitude,df[[i]]$Latitude, sep="_")
     Locs[[i]] <- Loc
     
@@ -216,14 +215,12 @@ for (j in 1:Nb) {
     AIC_rf_xy <- NULL
     for(i in 1:length(crop_species)){
       set.seed(1234)
-      #mod.rf.xy[[i]] <- ranger(Effect~., data=Training_xy[[i]], num.trees=1000)
       mod.rf.xy[[i]] <- ranger(Effect~., data=Training_xy[[i]], num.trees=1000, importance="permutation") #RZA ADD
       
       predictor.rf.xy <- Predictor$new(model = mod.rf.xy[[i]], data = Training_xy[[i]][-1], y = Training_xy[[i]]$Effect, predict.fun = pfun)
       
       Pred_rf_xy[[i]]<-predict( mod.rf.xy[[i]], data=Testing_xy[[i]])$predictions
       RMSEP_rf_xy[[i]]=sqrt(mean((Testing_xy[[i]]$Effect-Pred_rf_xy[[i]])^2))
-      #print(plot(Testing_xy[[i]]$Effect,Pred_rf_xy[[i]]))
       R2_rf_xy_int[[i]] <- mod.rf.xy[[i]]$r.squared
       R2_rf_xy[[i]] <- 1 - sum( (Testing_xy[[i]]$Effect-Pred_rf_xy[[i]])^2 ) / sum( (Testing_xy[[i]]$Effect - mean(Testing_xy[[i]]$Effect))^2 )
       AIC_rf_xy[[i]] <- mean((Testing_xy[[i]]$Effect-Pred_rf_xy[[i]])^2) + 2*dim(Training_xy[[i]][-1])[2]
@@ -262,7 +259,6 @@ for (j in 1:Nb) {
     for(i in 1:length(crop_species)){
       Training_0[[i]] <- Training_1[[i]][,-which(names(Training_1[[i]]) %in% c("Latitude","Longitude"))]
       set.seed(1234)
-      #mod.rf.0[[i]] <- ranger(Effect~., data=Training_0[[i]], num.trees=1000)
       mod.rf.0[[i]] <- ranger(Effect~., data=Training_0[[i]], num.trees=1000, importance="permutation") #RZA ADD
       predictor.rf.0 <- Predictor$new(mod.rf.0[[i]], data = Training_0[[i]][-1], y = Training_0[[i]]$Effect, predict.fun = pfun)
       
@@ -333,11 +329,7 @@ for (j in 1:Nb) {
   AIC_rf_1 <- NULL
   for(i in 1:length(crop_species)){
     set.seed(1234)
-    #if(same_locations){ #RZA REMOVE
       mod.rf.1[[i]] <- ranger(Effect~., data=Training_1[[i]], num.trees=1000, importance="permutation")
-    # } else {
-    #   mod.rf.1[[i]] <- ranger(Effect~., data=Training_1[[i]], num.trees=1000)
-    # }
     
     predictor.rf.1 <- Predictor$new(mod.rf.1[[i]], data = Training_1[[i]][-1], y = Training_1[[i]]$Effect, predict.fun = pfun)
     Pred_rf_1[[i]]<-predict( mod.rf.1[[i]], data=Testing_1[[i]])$predictions
@@ -670,7 +662,6 @@ for (j in 1:Nb) {
   }
   
   ObsPred[[j]] <- rbind(bestPred[[1]], bestPred[[2]], bestPred[[3]], bestPred[[4]])
-  #print(ObsPred)
   
   if(do_iml){
     PDPeffs[[j]] <- list(bestEffs[[1]], bestEffs[[2]], bestEffs[[3]], bestEffs[[4]])
@@ -811,12 +802,6 @@ for(i in 1:length(crop_species)){
   
   crop_species_col <- rep(crop_species[[i]], length(R2_MEAN))
   
-  ###TEMP
-  print(paste("NAME",NAME))
-  print(paste("RMSEP_MEAN",RMSEP_MEAN))
-  print(paste("crop_species_col",crop_species_col))
-  ###TEMP
-  
   RESULT[[i]]<-data.frame(NAME,RMSEP_MEAN, RMSEP_SE, R2_MEAN, R2_SE, AIC_MEAN, AIC_SE, crop_species_col)
   print(crop_species[[i]])
   print(RESULT[[i]])
@@ -825,8 +810,6 @@ for(i in 1:length(crop_species)){
 print("loop done")
 
 RESULT_ALL <- rbind(RESULT[[1]], RESULT[[2]],RESULT[[3]], RESULT[[4]])
-
-#list(RESULT_ALL, ObsPred, save.mod.rf, save.Training.rf, PDPeffs)
 
 fileprefix <- paste0(outputdir,"sameLocs",same_locations,"_adaptationTypes",adaptation_types,"_doIML",do_iml,"_Nb",Nb,"runAllMods",run_all_mods,"_trainOnAll",train_on_all)
 

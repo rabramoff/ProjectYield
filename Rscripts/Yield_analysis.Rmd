@@ -38,11 +38,9 @@ library(DALEX)
 #Switches
 ```{r switches}
 do_maps = T
-lowcolor = "#440154FF" #"#FF0000"
-midcolor = "#21908CFF" #"#FF8000"
-highcolor = "#FDE725FF" #"#FFFF00"
-#viridis low="#440154FF", mid="#21908CFF", high="#FDE725FF"
-##working - back to viridis but maybe change the second set of plots the difference between them
+lowcolor = "#440154FF"
+midcolor = "#21908CFF"
+highcolor = "#FDE725FF"
 ```
 
 #Data import
@@ -77,17 +75,13 @@ dev.off()
 FTAB %>% 
   group_by(Crop) %>% 
   summarize(locations = length(unique(Loca)),
-            samples = length(Effect), #complete.cases does not change value
+            samples = length(Effect),
             meanEffect = mean(Effect),
             medianEffect = median(Effect),
             minEffect = min(Effect),
             maxEffect = max(Effect),
             sd = sd(Effect),
             se = sd(Effect)/sqrt(length(Effect)))
-
-# View(FTAB %>%
-#     group_by(Crop,Adaptation.type) %>%
-#   summarize(n()))
 
 shorter <- FTAB %>%
   dplyr::select(Effect,Crop,Delta_temp,CO2.ppm,TempAvg,Precip,Delta_precip,Latitude,Longitude,Fertiliser,Irrigation,Cultivar,Soil.organic.matter.management,Planting.time,Tillage,Others,Loca) %>%
@@ -156,7 +150,7 @@ loop_func(same_locations, adaptation_types, do_iml, Nb, run_all_mods, train_on_a
 end <- Sys.time()
 end-start
 
-#Make 2 way adapt plot
+#Make 2 way interaction plot
 same_locations = F
 adaptation_types = F
 do_iml = T
@@ -184,7 +178,7 @@ end-start
 ##Make Plots
 ###Make obs v pred pred plots
 ```{r}
-same_locations = T #changed - run this combo
+same_locations = T #run both T and F
 adaptation_types = F
 do_iml = F
 Nb = 10
@@ -434,14 +428,14 @@ do_iml=F
 Nb=1
 
 ######Load models and data#####
-outputdir="/Users/r4y/Dropbox (ORNL)/Collaborations/Makowski_yield/Output/Rdata/"
-figoutdir="/Users/r4y/Dropbox (ORNL)/Collaborations/Makowski_yield/Output/Figures/"
+outputdir=paste0(rootdir,"/Output/Rdata/")
+figoutdir=paste0(rootdir,"/Output/Figures/")
 
 fileprefix <- paste0(outputdir,"sameLocs",same_locations,"_adaptationTypes",adaptation_types,"_doIML",do_iml,"_Nb",Nb,"runAllMods",run_all_mods,"_trainOnAll",train_on_all)
 load(paste0(fileprefix,"_saved_bestMLs.Rdata")) #save.mod.rf[[1]][[k]]
 load(paste0(fileprefix,"_saved_trainingData.Rdata"))
 
-mdatadir <- "/Users/r4y/Dropbox (ORNL)/Collaborations/Makowski_yield/Data/"
+mdatadir <- paste0(rootdir,"/Data/")
 
 TPavedata <- paste0(rootdir, "/MIRCA2000_W5ES_CountryData_fromToshi/annual_area_harvested_ha_30mn_with_climate.xlsx")
 Pave <- read.xlsx(TPavedata, sheet="Pave")
@@ -475,7 +469,7 @@ PrChangeData <- data.frame(Delta_temp_g=rep(Delta_temp_level, nrow(Tave)),
                            Longitude=Tave$x,
                            RCP=as.factor(rep("RCP4.5", nrow(Tave))),
                            Futureyear=rep(2060, nrow(Tave)),
-                           Pr_avg=Pave_merged$Prm #mean annual precip in mm #missing some values
+                           Pr_avg=Pave_merged$Prm #mean annual precip in mm
                            )
 
  #Prediction RF
@@ -486,14 +480,9 @@ PrChangeData$PrChange <- Pred_prchange
 
 head(PrChangeData)
 
-#Now just add Tave to PrChangeData then can move on to shaps
-#Tavealt is the same as TAB_p
+#Add Tave to PrChangeData
 PrChangeData$Tave <- Tave$Tave
 InputData <- na.omit(PrChangeData)
-
-#Filter by cropping areas #Both (Area_crop and CropArea) files are the same, except that 4 separate files that David sent me also has a "Flag" variable which decreases the total number of samples by about 12k
-  #Area_crop<-read.csv(paste0(mdatadir,crop_species[[1]],"_country.csv"), header=T)
-  #TAB_p_f<-Area_crop[Area_crop$Total*Area_crop$Flag>0,]
 ```
 
 ###Optional maps of precip and temp change 
@@ -515,7 +504,7 @@ InputData <- na.omit(PrChangeData)
 
 
     pdf(file=paste0(figoutdir,"PrAvg.pdf"), height=6, width=9)
-    print(gg1 + geom_tile(data=PrChangeData, aes(x=Longitude, y=Latitude, fill=Pr_avg), alpha=0.8) + scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, name="Avg Precip (mm)") + #, limits=c(-100,100)) + 
+    print(gg1 + geom_tile(data=PrChangeData, aes(x=Longitude, y=Latitude, fill=Pr_avg), alpha=0.8) + scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, name="Avg Precip (mm)") +
       ggtitle("Average Precipitation (mm)") +
       theme(#text=element_text(size=8), #change font size of all text
         axis.text.x=element_text(size=8, angle = 45, vjust = 0.5), #change font size of axis text
@@ -539,7 +528,7 @@ InputData <- na.omit(PrChangeData)
     dev.off()
     
         pdf(file=paste0(figoutdir,"TAvg.pdf"), height=6, width=9)
-    print(gg1 + geom_tile(data=PrChangeData, aes(x=Longitude, y=Latitude, fill=Tave), alpha=0.8) + scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, name="Avg Temp (degC)") + #, limits=c(-100,100)) + 
+    print(gg1 + geom_tile(data=PrChangeData, aes(x=Longitude, y=Latitude, fill=Tave), alpha=0.8) + scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, name="Avg Temp (degC)") + 
       ggtitle("Average Temperature (degC)") +
       theme(#text=element_text(size=8), #change font size of all text
         axis.text.x=element_text(size=8, angle = 45, vjust = 0.5), #change font size of axis text
@@ -555,11 +544,10 @@ InputData <- na.omit(PrChangeData)
 ```{r}
 rcp45 = T
 do_shap = T
-#Do_shap F has to be run by hand to generate the predicted effects
 
   Delta_temp_levels = c(2,2)
   CO2.ppm_levels = c(116,116)
-  Adaptation_levels = c("No","Yes") #c(1,2)
+  Adaptation_levels = c("No","Yes")
 
 start <- Sys.time()
 numbers <- c(1,2,3,4)
@@ -614,7 +602,7 @@ map_df$Variable <- factor(map_df$Variable,
                         labels=c("Adaptation", expression(Delta~"CO"[2]~"ppm above 390 ppm"), expression(Delta~"Precipitation (mm)"), expression(Delta~"Temperature"~degree~"C"), expression("Average Precipitation"~"(mm)"), expression("Average Temperature"~degree~"C")))
 
     pdf(file=paste0(figoutdir,"shap_rcp45_",crop_species[k],"_Adapt",AdaptLevel,".pdf"), height=6, width=9)
-    print(gg1 + geom_tile(data=map_df, aes(x=x, y=y, fill=Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, name="Shapley Value") + #, limits=c(-100,100)) + 
+    print(gg1 + geom_tile(data=map_df, aes(x=x, y=y, fill=Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, name="Shapley Value") +
       ggtitle(paste0(crop_species[k])) +
       facet_wrap(Variable ~ ., nrow=2, labeller = label_parsed) +
       theme(#text=element_text(size=8), #change font size of all text
@@ -749,7 +737,6 @@ map_df_adapt <- NULL
 map_df_noadapt <- NULL
 map_df_all <- NULL
 
-#Effect is the only different column - rbind to combine all Nbs, labelling the crop
 for (k in 1:4){
   load(file=paste0(outputdir,crop_species[k], "_Nb",1,"_Adapt",1,"_predicted_effect_4.5.RData"))
   
@@ -777,7 +764,6 @@ adpt.labs.change <- c("No Adaptation", "Adaptation","Difference")
 names(adpt.labs.change) <- c("No", "Yes", "Change")
 
 map_df_all$Crop <- as.factor(map_df_all$Crop)
-#levels(map_df_all$Crop) <- c("Maize", "Rice", "Soybean", "Wheat")
 
 map_change <- map_df_all %>% tidyr::pivot_wider(names_from=Adaptation, values_from=Effect) %>% mutate(Change = Yes-No) %>% tidyr::pivot_longer(cols=c(Yes, No, Change), names_to = "Adaptation", values_to = "Effect") 
 
@@ -858,22 +844,6 @@ summary(adpt1shap[adpt1shap$Crop=="Soybean",]$Adaptation)
 summary(adpt2shap[adpt2shap$Crop=="Soybean",]$Adaptation)
 summary(adpt1shap[adpt1shap$Crop=="Soybean",]$TempAvg)
 summary(adpt2shap[adpt2shap$Crop=="Soybean",]$TempAvg)
-```
-
-##Merge and check
-```{r}
-adptshap <- rbind(adpt1shap, adpt2shap)
-
-#Checking if all different
-all.equal(adpt1shap[adpt1shap$Crop=="Maize",], adpt2shap[adpt2shap$Crop=="Maize",])
-all.equal(adpt1shap[adpt1shap$Crop=="Rice",], adpt2shap[adpt2shap$Crop=="Rice",])
-all.equal(adpt1shap[adpt1shap$Crop=="Wheat",], adpt2shap[adpt2shap$Crop=="Wheat",])
-all.equal(adpt1shap[adpt1shap$Crop=="Soybean",], adpt2shap[adpt2shap$Crop=="Soybean",])
-
-plot(adpt1shap[adpt1shap$Crop=="Maize",]$Precip, adpt2shap[adpt2shap$Crop=="Maize",]$Precip)
-plot(adpt1shap[adpt1shap$Crop=="Rice",]$Precip, adpt2shap[adpt2shap$Crop=="Rice",]$Precip)
-plot(adpt1shap[adpt1shap$Crop=="Wheat",]$Precip, adpt2shap[adpt2shap$Crop=="Wheat",]$Precip)
-plot(adpt1shap[adpt1shap$Crop=="Soybean",]$Precip, adpt2shap[adpt2shap$Crop=="Soybean",]$Precip)
 ```
 
 # Shap Value Boxplots

@@ -1,6 +1,5 @@
 readin <- function(){
-  datadir <- paste0(rootdir,"/DownloadedFromNature/")
-  mdatadir <- paste0(rootdir,"/Data/")
+  datadir <- paste0(rootdir,"/DownloadedFromNature/") #from Figshare repository, accessible from article: https://www.nature.com/articles/s41597-022-01150-7#Sec10
   
   TAB<-read.xlsx(paste0(datadir,"Projected_Impacts_datasheet_11.24.2021.xlsx"), sheet=1)
   
@@ -21,5 +20,3 @@ readin <- function(){
                   CO2.ppm = CO2.ppm - 390)
   return(FTAB)
 }
-
-#RCP<-as.factor(TAB$Climate.scenario)

@@ -44,8 +44,6 @@ obs_v_pred <- function(ObsPred){
                      n = n()) %>%
     tidyr::pivot_wider(names_from = Type, names_sep = ".", values_from = c(mean, se, n))
   
-  #mean and se of Observed is redundant, since those don't change over iterations
-
   ggplot(FormOP, aes(x=mean.Observed, y=mean.Predicted)) +
     geom_point(size=0.5) +
     geom_errorbar(aes(ymin=mean.Predicted-se.Predicted, ymax=mean.Predicted+se.Predicted), width=.2,
