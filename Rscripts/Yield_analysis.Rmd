@@ -613,9 +613,8 @@ map_df$Variable <- factor(map_df$Variable,
                         labels=c("Adaptation", expression(Delta~"CO"[2]~"ppm above 390 ppm"), expression(Delta~"Precipitation (mm)"), expression(Delta~"Temperature"~degree~"C"), expression("Average Precipitation"~"(mm)"), expression("Average Temperature"~degree~"C")))
 
     pdf(file=paste0(figoutdir,"shap_rcp45_",crop_species[k],"_Adapt",AdaptLevel,".pdf"), height=6, width=9)
-    print(gg1 + geom_tile(data=map_df, aes(x=x, y=y, fill=Effect), alpha=0.8) + #scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, name="Shapley Value") +
-   #scale_fill_gradientn(colours=c("#533600", "#966D12", "#CBA46C", "#EED5B8", "#F6F6F6", "#A9E4DC", "#2EBEB0", "#00897B", "#004B40"), limits=c(-35,35), breaks=c(-35,-15,0,15,35)) + #opt1
-        scale_fill_gradientn(colours=c("#533600", "#966D12", "#CBA46C",  "#F6F6F6", "#2EBEB0", "#00897B", "#004B40"), limits=c(-35,35),  breaks=c(-35,-15,0,15,35)) + #opt2
+    print(gg1 + geom_tile(data=map_df, aes(x=x, y=y, fill=Effect), alpha=0.8) + 
+      scale_fill_gradientn(colours=c("#533600", "#966D12", "#CBA46C",  "#F6F6F6", "#2EBEB0", "#00897B", "#004B40"), limits=c(-35,35),  breaks=c(-35,-15,0,15,35), name="Yield Change (%)") + 
       ggtitle(paste0(crop_species[k])) +
       facet_wrap(Variable ~ ., nrow=2, labeller = label_parsed) +
       theme(#text=element_text(size=8), #change font size of all text
@@ -787,9 +786,8 @@ rcpwidth <- 9
 rcpsize <- 8
 ###Plot####
     pdf(file=paste0(figoutdir,"allcrops_rcp45",rcp45,".pdf"), height=rcpheight, width=rcpwidth)
-    print(gg1 + geom_tile(data=map_df_all, aes(x=Longitude, y=Latitude, fill=Effect), alpha=0.8) + #scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, limits=c(summary(map_df_all$Effect)[1],summary(map_df_all$Effect)[6]), name="Yield Change (%)") + 
-      #scale_fill_gradientn(colours=c("#533600", "#966D12", "#CBA46C", "#EED5B8", "#F6F6F6", "#A9E4DC", "#2EBEB0", "#00897B", "#004B40"), limits=c(-65,65), breaks=c(-65,-25,0,25,65)) + #opt1
-        scale_fill_gradientn(colours=c("#533600", "#966D12", "#CBA46C",  "#F6F6F6", "#2EBEB0", "#00897B", "#004B40"), limits=c(-65,65),  breaks=c(-65,-25,0,25,65)) + #opt2
+    print(gg1 + geom_tile(data=map_df_all, aes(x=Longitude, y=Latitude, fill=Effect), alpha=0.8) + 
+      scale_fill_gradientn(colours=c("#533600", "#966D12", "#CBA46C",  "#F6F6F6", "#2EBEB0", "#00897B", "#004B40"), limits=c(-65,65),  breaks=c(-65,-25,0,25,65), name="Yield Change (%)") +
       ggtitle(paste0("RCP 4.5")) +
       facet_grid(Adaptation ~ Crop, labeller = labeller(Adaptation = adpt.labs)) +
       theme(#text=element_text(size=8), #change font size of all text
@@ -802,10 +800,8 @@ rcpsize <- 8
     dev.off()
     
     pdf(file=paste0(figoutdir,"allcrops_rcp45",rcp45,"_change.pdf"), height=rcpheight, width=rcpwidth)
-    print(gg1 + geom_tile(data=map_change, aes(x=Longitude, y=Latitude, fill=Effect), alpha=0.8) + #scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, limits=c(summary(map_change$Effect)[1],summary(map_change$Effect)[6]), name="Yield Change (%)") +
-      #scale_fill_gradientn(colours=c("#004B40", "#00897B", "#2EBEB0", "#F6F6F6", "#CBA46C", "#966D12", "#533600"), limits=c(-100,100), breaks=c(-100,0,100)) +
-      #scale_fill_gradientn(colours=c("#533600", "#966D12", "#CBA46C", "#EED5B8", "#F6F6F6", "#A9E4DC", "#2EBEB0", "#00897B", "#004B40"), limits=c(-65,65), breaks=c(-65,-25,0,25,65)) + #opt1
-        scale_fill_gradientn(colours=c("#533600", "#966D12", "#CBA46C",  "#F6F6F6", "#2EBEB0", "#00897B", "#004B40"), limits=c(-65,65),  breaks=c(-65,-25,0,25,65)) + #opt2
+    print(gg1 + geom_tile(data=map_change, aes(x=Longitude, y=Latitude, fill=Effect), alpha=0.8) + 
+        scale_fill_gradientn(colours=c("#533600", "#966D12", "#CBA46C",  "#F6F6F6", "#2EBEB0", "#00897B", "#004B40"), limits=c(-65,65),  breaks=c(-65,-25,0,25,65), name="Yield Change (%)") + 
       ggtitle(paste0("RCP 4.5")) +
       facet_grid(Adaptation_f ~ Crop, labeller = labeller(Adaptation_f = adpt.labs.change)) +
       theme(#text=element_text(size=8), #change font size of all text
