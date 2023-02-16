@@ -131,11 +131,13 @@ for (j in 1:Nb) {
     
     #Remove where N<24 (one instance of N=23 removed)
     if(adaptation_types){
+      #Remove SOM management and Tillage and Others
       df[[i]]<-df[[i]][ , -which(names(df[[i]]) %in% c("Tillage","Soil.organic.matter.management"))]
       df_lm[[i]]<-df_lm[[i]][ , -which(names(df_lm[[i]]) %in% c("Tillage","Soil.organic.matter.management"))]
       
       if(i==1|i==4){
-        #Remove SOM management and Tillage and Others
+        df[[i]]<-df[[i]][ , -which(names(df[[i]]) %in% c("Fertiliser"))]
+        df_lm[[i]]<-df_lm[[i]][ , -which(names(df_lm[[i]]) %in% c("Fertiliser"))]
         df[[i]]<-df[[i]][ , -which(names(df[[i]]) %in% c("Others"))]
         df_lm[[i]]<-df_lm[[i]][ , -which(names(df_lm[[i]]) %in% c("Others"))]
       }
@@ -145,12 +147,9 @@ for (j in 1:Nb) {
         df_lm[[i]]<-df_lm[[i]][ , -which(names(df_lm[[i]]) %in% c("Irrigation"))]
       }
       
-      if(i==1){
-        df[[i]]<-df[[i]][ , -which(names(df[[i]]) %in% c("Fertiliser"))]
-      df_lm[[i]]<-df_lm[[i]][ , -which(names(df_lm[[i]]) %in% c("Fertiliser"))]
-      }
-      
       if(i==4){
+        df[[i]]<-df[[i]][ , -which(names(df[[i]]) %in% c("Cultivar"))]
+        df_lm[[i]]<-df_lm[[i]][ , -which(names(df_lm[[i]]) %in% c("Cultivar"))]
         df[[i]]<-df[[i]][ , -which(names(df[[i]]) %in% c("Planting.time"))]
         df_lm[[i]]<-df_lm[[i]][ , -which(names(df_lm[[i]]) %in% c("Planting.time"))]
       }
@@ -274,7 +273,7 @@ for (j in 1:Nb) {
     
   }
   
-    ####Climate GBM#####
+    ####Climate GBM####
     mod.gbm.0 <- NULL
     Pred_gbm_0 <- NULL
     RMSEP_gbm_0 <- NULL
@@ -309,18 +308,22 @@ for (j in 1:Nb) {
         #feature effects
         effs <- FeatureEffects$new(predictor.gbm.0, method="pdp")
         
-        twoway <- FeatureEffect$new(predictor.gbm.0, feature = c("Delta_temp", "Adaptation"), method="pdp")
+        if(adaptation_types==F){
+          twoway <- FeatureEffect$new(predictor.gbm.0, feature = c("Delta_temp", "Adaptation"), method="pdp")
+        }
         
        if(i==1){
           bestEffs[[i]] <- effs
-          best2way[[i]] <- twoway
+          if(adaptation_types==F){
+            best2way[[i]] <- twoway
+          }
        }
       }
     
       
       }
   
-  ####Climate+longlat RF#####
+    ####Climate+longlat RF#####
   mod.rf.1 <- NULL
   RMSEP_rf_1 <- NULL
   Pred_rf_1 <- NULL
@@ -354,11 +357,15 @@ for (j in 1:Nb) {
       #feature effects
       effs <- FeatureEffects$new(predictor.rf.1, method="pdp")
       
-      twoway <- FeatureEffect$new(predictor.rf.1, feature = c("Delta_temp", "Adaptation"), method="pdp")
+      if(adaptation_types==F){
+        twoway <- FeatureEffect$new(predictor.rf.1, feature = c("Delta_temp", "Adaptation"), method="pdp")
+      }
       
     if(i==2|i==4){
       bestEffs[[i]] <- effs
-      best2way[[i]] <- twoway
+      if(adaptation_types==F){
+        best2way[[i]] <- twoway
+      }
     }
     }
 
@@ -399,11 +406,15 @@ for (j in 1:Nb) {
         #feature effects
         effs <- FeatureEffects$new(predictor.gbm.1, method="pdp")
         
-        twoway <- FeatureEffect$new(predictor.gbm.1, feature = c("Delta_temp", "Adaptation"), method="pdp")
+        if(adaptation_types==F){
+          twoway <- FeatureEffect$new(predictor.gbm.1, feature = c("Delta_temp", "Adaptation"), method="pdp")
+        }
         
         if(i==3){  
           bestEffs[[i]] <- effs
-          best2way[[i]] <- twoway
+          if(adaptation_types==F){
+            best2way[[i]] <- twoway
+          }
         }
       }  
       
@@ -411,7 +422,7 @@ for (j in 1:Nb) {
     
     if(run_all_mods){
     #####Mixed models#####
-    ####Climate#####
+    #####Climate#####
     mod_lm <- NULL
     out_lm <- NULL
     RMSEP_lm <- NULL
@@ -423,8 +434,8 @@ for (j in 1:Nb) {
       if(adaptation_types){
         if(same_locations){
           if(i==1){
-            mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting.time+(1|Loca), data=Training_2[[i]])
-            out_lm[[i]]<-anova(lme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting.time, random=~1|Loca, data=Training_2[[i]]))
+            mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Cultivar+Planting.time+(1|Loca), data=Training_2[[i]])
+            out_lm[[i]]<-anova(lme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Cultivar+Planting.time, random=~1|Loca, data=Training_2[[i]]))
           }
           if(i==2){
             mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Fertiliser+Cultivar+Planting.time+Others+(1|Loca), data=Training_2[[i]])
@@ -435,13 +446,13 @@ for (j in 1:Nb) {
             out_lm[[i]]<-anova(lme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting.time+Others, random=~1|Loca, data=Training_2[[i]]))
           }
           if(i==4){
-            mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Fertiliser+Cultivar+Planting.time+(1|Loca), data=Training_2[[i]])
-            out_lm[[i]]<-anova(lme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Fertiliser+Cultivar+Planting.time, random=~1|Loca, data=Training_2[[i]]))
+            mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+(1|Loca), data=Training_2[[i]])
+            out_lm[[i]]<-anova(lme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm, random=~1|Loca, data=Training_2[[i]]))
           }
         } else {
           if(i==1){
-            mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting.time+(1|Ref.No), data=Training_2[[i]])
-            out_lm[[i]]<-anova(lme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting.time, random=~1|Ref.No, data=Training_2[[i]]))
+            mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Cultivar+Planting.time+(1|Ref.No), data=Training_2[[i]])
+            out_lm[[i]]<-anova(lme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Cultivar+Planting.time, random=~1|Ref.No, data=Training_2[[i]]))
           }
           if(i==2){
             mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Fertiliser+Cultivar+Planting.time+Others+(1|Ref.No), data=Training_2[[i]])
@@ -452,8 +463,8 @@ for (j in 1:Nb) {
             out_lm[[i]]<-anova(lme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting.time+Others, random=~1|Ref.No, data=Training_2[[i]]))
           }
           if(i==4){
-            mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Fertiliser+Cultivar+Planting.time+(1|Ref.No), data=Training_2[[i]])
-            out_lm[[i]]<-anova(lme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Fertiliser+Cultivar+Planting.time, random=~1|Ref.No, data=Training_2[[i]]))
+            mod_lm[[i]]<-lmer(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+(1|Ref.No), data=Training_2[[i]])
+            out_lm[[i]]<-anova(lme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm, random=~1|Ref.No, data=Training_2[[i]]))
           }
         }
       }else{
@@ -489,8 +500,8 @@ for (j in 1:Nb) {
       if(adaptation_types){
         if(same_locations){
           if(i==1){
-            mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Irrigation+Fertiliser+Cultivar+Planting.time)+(1|Loca), data=Training_2[[i]])
-            out_lm_ints[[i]]<-anova(lme(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Irrigation+Fertiliser+Cultivar+Planting.time), random=~1|Loca, data=Training_2[[i]]))
+            mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Irrigation+Cultivar+Planting.time)+(1|Loca), data=Training_2[[i]])
+            out_lm_ints[[i]]<-anova(lme(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Irrigation+Cultivar+Planting.time), random=~1|Loca, data=Training_2[[i]]))
           }
           if(i==2){
             mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Fertiliser+Cultivar+Planting.time+Others)+(1|Loca), data=Training_2[[i]])
@@ -501,13 +512,13 @@ for (j in 1:Nb) {
             out_lm_ints[[i]]<-anova(lme(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Irrigation+Fertiliser+Cultivar+Planting.time+Others), random=~1|Loca, data=Training_2[[i]]))
           }
           if(i==4){
-            mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Fertiliser+Cultivar+Planting.time)+(1|Loca), data=Training_2[[i]])
-            out_lm_ints[[i]]<-anova(lme(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Fertiliser+Cultivar+Planting.time), random=~1|Loca, data=Training_2[[i]]))
+            mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm+(1|Loca), data=Training_2[[i]])
+            out_lm_ints[[i]]<-anova(lme(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm, random=~1|Loca, data=Training_2[[i]]))
           }
         } else {
           if(i==1){
-            mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Irrigation+Fertiliser+Cultivar+Planting.time)+(1|Ref.No), data=Training_2[[i]])
-            out_lm_ints[[i]]<-anova(lme(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Irrigation+Fertiliser+Cultivar+Planting.time), random=~1|Ref.No, data=Training_2[[i]]))
+            mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Irrigation+Cultivar+Planting.time)+(1|Ref.No), data=Training_2[[i]])
+            out_lm_ints[[i]]<-anova(lme(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Irrigation+Cultivar+Planting.time), random=~1|Ref.No, data=Training_2[[i]]))
           }
           if(i==2){
             mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Fertiliser+Cultivar+Planting.time+Others)+(1|Ref.No), data=Training_2[[i]])
@@ -518,8 +529,8 @@ for (j in 1:Nb) {
             out_lm_ints[[i]]<-anova(lme(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Irrigation+Fertiliser+Cultivar+Planting.time+Others), random=~1|Ref.No, data=Training_2[[i]]))
           }
           if(i==4){
-            mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Fertiliser+Cultivar+Planting.time)+(1|Ref.No), data=Training_2[[i]])
-            out_lm_ints[[i]]<-anova(lme(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm*(Fertiliser+Cultivar+Planting.time), random=~1|Ref.No, data=Training_2[[i]]))
+            mod_lm_ints[[i]]<-lmer(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm+(1|Ref.No), data=Training_2[[i]])
+            out_lm_ints[[i]]<-anova(lme(Effect~Delta_temp*TempAvg*Precip*Delta_precip*CO2.ppm, random=~1|Ref.No, data=Training_2[[i]]))
           }
         }
       }else{  
@@ -571,7 +582,7 @@ for (j in 1:Nb) {
       
       if(adaptation_types){
         if(i==1){
-          mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting.time+Matern(1|x+y), data=Training_2[[i]])
+          mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Cultivar+Planting.time+Matern(1|x+y), data=Training_2[[i]])
         }
         if(i==2){
           mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Fertiliser+Cultivar+Planting.time+Others+Matern(1|x+y), data=Training_2[[i]])
@@ -580,7 +591,7 @@ for (j in 1:Nb) {
           mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Irrigation+Fertiliser+Cultivar+Planting.time+Others+Matern(1|x+y), data=Training_2[[i]])
         }
         if(i==4){
-          mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Fertiliser+Cultivar+Matern(1|x+y), data=Training_2[[i]]) #For some reason planting time doesn't work here so removed
+          mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+CO2.ppm+Matern(1|x+y), data=Training_2[[i]]) #For some reason planting time doesn't work here so removed
         }
       }else{
         mod_spa_lm[[i]]<-fitme(Effect~Delta_temp+TempAvg+Precip+Delta_precip+Adaptation+CO2.ppm+Matern(1|x+y), data=Training_2[[i]])

@@ -21,15 +21,19 @@ makebaseplot <- function(){
 
 map_of_df <- function(DATA){
   gg1 <- makebaseplot()
-  gg1 + geom_point(data=DATA, aes(x=Longitude, y=Latitude, color=Effect), pch=16, size=1) + scale_color_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, limits=c(-100,140), breaks=c(-100,0,100)) + 
-   labs(color="Yield Change (%)") +
+  gg1 + geom_point(data=DATA, aes(x=Longitude, y=Latitude, color=Effect), pch=16, size=1.5) + 
+    #scale_color_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, limits=c(-100,140), breaks=c(-100,0,100)) + 
+    scale_color_gradientn(colours=c("#533600", "#966D12", "#CBA46C",  "#F6F6F6", "#2EBEB0", "#00897B", "#004B40"), limits=c(-140,140),  breaks=c(-100,0,100)) + #opt2
+    labs(color="Yield Change (%)") +
     facet_wrap(~Crop)
 }
 
 hist_of_df <- function(DATA){
   ggplot(data=DATA, aes(x=Effect)) + 
     geom_histogram() + theme_classic() + scale_fill_continuous() + xlim(-100,140) +
-    geom_vline(aes(xintercept = mean(Effect)),col='black', lty=2) + geom_vline(aes(xintercept = median(Effect)),col='gray', lty=3) + xlab("Yield Change (%)") +
+    xlab("Yield Change (%)") +
+    geom_vline(data = ddply(DATA, "Crop", summarize, wavg = mean(Effect)), aes(xintercept=wavg),col='black', lty=2) +
+    geom_vline(data = ddply(DATA, "Crop", summarize, wavg = median(Effect)), aes(xintercept=wavg),col='gray', lty=3) +
     facet_wrap(~Crop)
 }
 
@@ -45,12 +49,13 @@ obs_v_pred <- function(ObsPred){
     tidyr::pivot_wider(names_from = Type, names_sep = ".", values_from = c(mean, se, n))
   
   ggplot(FormOP, aes(x=mean.Observed, y=mean.Predicted)) +
-    geom_point(size=0.5) +
     geom_errorbar(aes(ymin=mean.Predicted-se.Predicted, ymax=mean.Predicted+se.Predicted), width=.2,
-                  position=position_dodge(0.05)) +
+                  position=position_dodge(0.05), color="darkgray") + 
+    geom_point(size=0.5) +
     ylab("Predicted Yield Change (%)") +
     xlab("Observed Yield Change (%)") +
     facet_wrap(~Crop) + theme_bw()
+  
 }
 
 

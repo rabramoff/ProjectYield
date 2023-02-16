@@ -33,6 +33,8 @@ library(randomForest)
 library(mapdata)
 library(raster)
 library(DALEX)
+library(caret)
+#library(tidyverse)
 ```
 
 #Switches
@@ -41,11 +43,17 @@ do_maps = T
 lowcolor = "#440154FF"
 midcolor = "#21908CFF"
 highcolor = "#FDE725FF"
+  
+lowcolor = "#533600"
+midcolor = "#F6F6F6" 
+highcolor = "#004B40" 
+  
+diverging_hcl(palette = "Green-Brown",n = 9)
 ```
 
 #Data import
 ```{r data-import}
-rootdir <- "/Users/r4y/Dropbox (ORNL)/Collaborations/ProjectYield"
+rootdir <- "/Users/rzabramoff/Documents/ORNL/DropboxORNL/Collaborations/ProjectYield"
 outputdir= paste0(rootdir,"/Output/Rdata/")
 figoutdir= paste0(rootdir,"/Output/Figures/")
 crop_species = c("Maize","Rice","Wheat","Soybean")
@@ -74,7 +82,7 @@ dev.off()
 ```{r}
 FTAB %>% 
   group_by(Crop) %>% 
-  summarize(locations = length(unique(Loca)),
+  dplyr::summarize(locations = length(unique(Loca)),
             samples = length(Effect),
             meanEffect = mean(Effect),
             medianEffect = median(Effect),
@@ -84,10 +92,12 @@ FTAB %>%
             se = sd(Effect)/sqrt(length(Effect)))
 
 shorter <- FTAB %>%
-  dplyr::select(Effect,Crop,Delta_temp,CO2.ppm,TempAvg,Precip,Delta_precip,Latitude,Longitude,Fertiliser,Irrigation,Cultivar,Soil.organic.matter.management,Planting.time,Tillage,Others,Loca) %>%
+  dplyr::select(Effect,Crop,Delta_temp,CO2.ppm,TempAvg,Precip,Delta_precip,Latitude,Longitude,Fertiliser,Irrigation,Cultivar,Soil.organic.matter.management,Planting.time,Tillage,Others,Loca,Adaptation.type) %>%
   tidyr::drop_na()
 
 length(unique(shorter$Loca))
+
+table(shorter$Adaptation.type, by=shorter$Crop)
 ```
 
 #Yield Loop
@@ -241,6 +251,7 @@ maize.effs <- bindeffs(PDPeffs, 1)
 rice.effs <- bindeffs(PDPeffs, 2)
 wheat.effs <- bindeffs(PDPeffs, 3)
 soybean.effs <- bindeffs(PDPeffs, 4)
+soybean.effs$.borders <- as.character(soybean.effs$.borders)
 
      efdf <- maize.effs %>% 
        dplyr::full_join(rice.effs) %>%
@@ -312,7 +323,7 @@ if(adaptation_types){
           ylab("Yield Improvement with Adaptation (%)") +
           xlab("") + 
           theme_bw() + theme(legend.position = "none", strip.text.x = element_text(size = 5), axis.text.x=element_text(angle = 45, hjust= 1)) +
-          scale_fill_manual(values = c(cbPalette[1], cbPalette[2], cbPalette[3], cbPalette[4])) + 
+          scale_fill_manual(values = c(cbPalette[1], cbPalette[2], cbPalette[4])) + 
           guides(colour = guide_legend(override.aes = list(size=5)))
 }else{
   p6 <- ggplot(efdf.adaptation, aes(x = .borders, y = .value, fill=.crop)) +
@@ -342,7 +353,7 @@ pdf(file=paste0(figoutdir,"adaptation",adaptation_types,"_PDPs.pdf"), height=6, 
     multiplot(p1,p2,p3,p8,p9,p4,p5, cols=2)
 dev.off()
 
-pdf(file=paste0(figoutdir,"adaptation",adaptation_types,"_PDPs_adapt.pdf"), height=6, width=3.25)
+pdf(file=paste0(figoutdir,"adaptation",adaptation_types,"_PDPs_adapt.pdf"), height=5, width=3.25)
     p6
 dev.off()
 
@@ -516,7 +527,7 @@ InputData <- na.omit(PrChangeData)
     dev.off()
     
         pdf(file=paste0(figoutdir,"PrChange.pdf"), height=6, width=9)
-    print(gg1 + geom_tile(data=PrChangeData, aes(x=Longitude, y=Latitude, fill=PrChange), alpha=0.8) + scale_fill_gradient2(midpoint=0, low="#440154FF", mid=midcolor, high=highcolor, name="Delta Precip (mm)", limits=c(-300,400)) + 
+    print(gg1 + geom_tile(data=PrChangeData, aes(x=Longitude, y=Latitude, fill=PrChange), alpha=0.8) + scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, name="Delta Precip (mm)", limits=c(-300,400)) + 
       ggtitle("Change in Precipitation (mm)") +
       theme(#text=element_text(size=8), #change font size of all text
         axis.text.x=element_text(size=8, angle = 45, vjust = 0.5), #change font size of axis text
@@ -602,7 +613,9 @@ map_df$Variable <- factor(map_df$Variable,
                         labels=c("Adaptation", expression(Delta~"CO"[2]~"ppm above 390 ppm"), expression(Delta~"Precipitation (mm)"), expression(Delta~"Temperature"~degree~"C"), expression("Average Precipitation"~"(mm)"), expression("Average Temperature"~degree~"C")))
 
     pdf(file=paste0(figoutdir,"shap_rcp45_",crop_species[k],"_Adapt",AdaptLevel,".pdf"), height=6, width=9)
-    print(gg1 + geom_tile(data=map_df, aes(x=x, y=y, fill=Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, name="Shapley Value") +
+    print(gg1 + geom_tile(data=map_df, aes(x=x, y=y, fill=Effect), alpha=0.8) + #scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, name="Shapley Value") +
+   #scale_fill_gradientn(colours=c("#533600", "#966D12", "#CBA46C", "#EED5B8", "#F6F6F6", "#A9E4DC", "#2EBEB0", "#00897B", "#004B40"), limits=c(-35,35), breaks=c(-35,-15,0,15,35)) + #opt1
+        scale_fill_gradientn(colours=c("#533600", "#966D12", "#CBA46C",  "#F6F6F6", "#2EBEB0", "#00897B", "#004B40"), limits=c(-35,35),  breaks=c(-35,-15,0,15,35)) + #opt2
       ggtitle(paste0(crop_species[k])) +
       facet_wrap(Variable ~ ., nrow=2, labeller = label_parsed) +
       theme(#text=element_text(size=8), #change font size of all text
@@ -769,41 +782,56 @@ map_change <- map_df_all %>% tidyr::pivot_wider(names_from=Adaptation, values_fr
 
 map_change$Adaptation_f <- factor(map_change$Adaptation, levels=c("No","Yes","Change"))
 
+rcpheight <- 7
+rcpwidth <- 9
+rcpsize <- 8
 ###Plot####
-    pdf(file=paste0(figoutdir,"allcrops_rcp45",rcp45,".pdf"), height=6, width=9)
-    print(gg1 + geom_tile(data=map_df_all, aes(x=Longitude, y=Latitude, fill=Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, limits=c(summary(map_df_all$Effect)[1],summary(map_df_all$Effect)[6]), name="Yield Change (%)") + 
+    pdf(file=paste0(figoutdir,"allcrops_rcp45",rcp45,".pdf"), height=rcpheight, width=rcpwidth)
+    print(gg1 + geom_tile(data=map_df_all, aes(x=Longitude, y=Latitude, fill=Effect), alpha=0.8) + #scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, limits=c(summary(map_df_all$Effect)[1],summary(map_df_all$Effect)[6]), name="Yield Change (%)") + 
+      #scale_fill_gradientn(colours=c("#533600", "#966D12", "#CBA46C", "#EED5B8", "#F6F6F6", "#A9E4DC", "#2EBEB0", "#00897B", "#004B40"), limits=c(-65,65), breaks=c(-65,-25,0,25,65)) + #opt1
+        scale_fill_gradientn(colours=c("#533600", "#966D12", "#CBA46C",  "#F6F6F6", "#2EBEB0", "#00897B", "#004B40"), limits=c(-65,65),  breaks=c(-65,-25,0,25,65)) + #opt2
       ggtitle(paste0("RCP 4.5")) +
       facet_grid(Adaptation ~ Crop, labeller = labeller(Adaptation = adpt.labs)) +
       theme(#text=element_text(size=8), #change font size of all text
-        axis.text.x=element_text(size=8, angle = 45, vjust = 0.5), #change font size of axis text
-        axis.text.y=element_text(size=8), #change font size of axis titles
-        plot.title=element_text(size=8), #change font size of plot title
-        legend.text=element_text(size=8), #change font size of legend text
-        legend.title=element_text(size=8)) #change font size of legend title
+        axis.text.x=element_text(size=rcpsize, angle = 45, vjust = 0.5), #change font size of axis text
+        axis.text.y=element_text(size=rcpsize), #change font size of axis titles
+        plot.title=element_text(size=rcpsize), #change font size of plot title
+        legend.text=element_text(size=rcpsize), #change font size of legend text
+        legend.title=element_text(size=rcpsize)) #change font size of legend title
     )
     dev.off()
     
-    pdf(file=paste0(figoutdir,"allcrops_rcp45",rcp45,"_change.pdf"), height=6, width=9)
-    print(gg1 + geom_tile(data=map_change, aes(x=Longitude, y=Latitude, fill=Effect), alpha=0.8) + scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, limits=c(summary(map_change$Effect)[1],summary(map_change$Effect)[6]), name="Yield Change (%)") + 
+    pdf(file=paste0(figoutdir,"allcrops_rcp45",rcp45,"_change.pdf"), height=rcpheight, width=rcpwidth)
+    print(gg1 + geom_tile(data=map_change, aes(x=Longitude, y=Latitude, fill=Effect), alpha=0.8) + #scale_fill_gradient2(midpoint=0, low=lowcolor, mid=midcolor, high=highcolor, limits=c(summary(map_change$Effect)[1],summary(map_change$Effect)[6]), name="Yield Change (%)") +
+      #scale_fill_gradientn(colours=c("#004B40", "#00897B", "#2EBEB0", "#F6F6F6", "#CBA46C", "#966D12", "#533600"), limits=c(-100,100), breaks=c(-100,0,100)) +
+      #scale_fill_gradientn(colours=c("#533600", "#966D12", "#CBA46C", "#EED5B8", "#F6F6F6", "#A9E4DC", "#2EBEB0", "#00897B", "#004B40"), limits=c(-65,65), breaks=c(-65,-25,0,25,65)) + #opt1
+        scale_fill_gradientn(colours=c("#533600", "#966D12", "#CBA46C",  "#F6F6F6", "#2EBEB0", "#00897B", "#004B40"), limits=c(-65,65),  breaks=c(-65,-25,0,25,65)) + #opt2
       ggtitle(paste0("RCP 4.5")) +
       facet_grid(Adaptation_f ~ Crop, labeller = labeller(Adaptation_f = adpt.labs.change)) +
       theme(#text=element_text(size=8), #change font size of all text
-        axis.text.x=element_text(size=8, angle = 45, vjust = 0.5), #change font size of axis text
-        axis.text.y=element_text(size=8), #change font size of axis titles
-        plot.title=element_text(size=8), #change font size of plot title
-        legend.text=element_text(size=8), #change font size of legend text
-        legend.title=element_text(size=8)) #change font size of legend title
+        axis.text.x=element_text(size=rcpsize, angle = 45, vjust = 0.5), #change font size of axis text
+        axis.text.y=element_text(size=rcpsize), #change font size of axis titles
+        plot.title=element_text(size=rcpsize), #change font size of plot title
+        legend.text=element_text(size=rcpsize), #change font size of legend text
+        legend.title=element_text(size=rcpsize)) #change font size of legend title
     )
     dev.off()
     
       pdf(file=paste0(figoutdir,"allcrops_rcp45",rcp45,"_boxplot.pdf"), height=3, width=5)
           print(ggplot(data=map_df_all, aes(x=Crop, y=Effect, fill=Adaptation), alpha=0.8) + 
                   geom_boxplot(outlier.shape = NA) + stat_boxplot(geom ='errorbar', coef=NULL) +
-                  ggtitle(paste0("RCP 4.5")) + theme_classic() +
+                    scale_fill_manual(values=c("darkgray","lightgray")) +
+                   ggtitle(paste0("RCP 4.5")) + theme_classic() +
                   geom_hline(yintercept=0, linetype='dotted') +
               ylab("Yield Change (%)") #change font size of legend title
           )
       dev.off()
+
+#Statistically significant effect of adaptation
+stat_test <- lm(map_df_all$Effect ~ map_df_all$Adaptation + map_df_all$Crop)
+summary(stat_test)
+summary.aov(stat_test)
+plot(stat_test)
 ```
 
 # Load shapmaps and summaries
